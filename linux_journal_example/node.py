@@ -127,6 +127,24 @@ class DistributedHash(object) :
     for k in newnode :
       del predecessor[k]
 
+  def leave(self, node) :
+    predecessor = None
+    for n in self._iternodes() :
+      if n.id == node.id :
+        break
+      predecessor = n
+    else :
+      # Node already gone.  Maybe log the missing node, but work is done
+      return
+    if predecessor is None :
+      # removing first node, so set predecessor to end
+      for predecessor in self._iternodes() :
+        pass
+      self.__start = self.__start.next
+    for k, v in node.iteritems() :
+      predecessor[k] = v
+    predecessor.next = n.next
+    node.next = None
 
 
 # Clockwise ring function taken from <http://www.linuxjournal.com/article/6797>

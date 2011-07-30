@@ -62,5 +62,32 @@ class SimpleTest(unittest.TestCase) :
     for k, v in as_dict.iteritems() :
       self.assertEquals(self.distributed_hash.lookup(k), v)
 
+  def testLeaveNoncontained(self) :
+    self.assertEquals(self.distributed_hash.leave(node.Node()), None)
+
+  def testLeaveNonfirst(self) :
+    fill_with_words(self.distributed_hash, 10000)
+    old_num_nodes = self.distributed_hash.num_nodes()
+    as_dict = dict((k, self.distributed_hash.lookup(k))
+                   for k in self.distributed_hash.iterkeys())
+    parting = list(self.distributed_hash._iternodes())[(1+old_num_nodes)/2]
+    self.distributed_hash.leave(parting)
+    self.assertEqual(len(self.distributed_hash), 10000)
+    self.assertEquals(self.distributed_hash.num_nodes(), old_num_nodes-1)
+    for k, v in as_dict.iteritems() :
+      self.assertEquals(self.distributed_hash.lookup(k), v)
+
+  def testLeaveFirst(self) :
+    fill_with_words(self.distributed_hash, 10000)
+    old_num_nodes = self.distributed_hash.num_nodes()
+    as_dict = dict((k, self.distributed_hash.lookup(k))
+                   for k in self.distributed_hash.iterkeys())
+    parting = list(self.distributed_hash._iternodes())[0]
+    self.distributed_hash.leave(parting)
+    self.assertEqual(len(self.distributed_hash), 10000)
+    self.assertEquals(self.distributed_hash.num_nodes(), old_num_nodes-1)
+    for k, v in as_dict.iteritems() :
+      self.assertEquals(self.distributed_hash.lookup(k), v)
+
 if __name__=="__main__" :
   unittest.main()
