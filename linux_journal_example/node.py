@@ -1,6 +1,7 @@
 # Heavily based on example at <http://www.linuxjournal.com/article/6797>
 import hashlib
 import uuid
+from collections import MutableMapping
 
 
 
@@ -12,9 +13,10 @@ def hash_key(key) :
 # hashing, and the latter for the node ids and the sizes already work.
 hash_bits = 128
 
-# I could probably derive from a dictionary, or a MutableMapping base
-# class, but I might need to change too many functions...
-class Node(object) :
+# I could probably derive from a dictionary, and just add extra
+# properties and methods, but I might need to change too many
+# functions, especially when I want to persist the data to disk.
+class Node(MutableMapping) :
   def __init__(self) :
     # uuid4 is not uniform over 2**128 because hex digit 13 is always
     # 4, and hex digit 17 is either 8, 9, A, or B.  But since these
@@ -43,12 +45,13 @@ class Node(object) :
 
   def iterkeys(self) :
     return self.data.iterkeys()
+  __iter__ = iterkeys
+
+  def __contains__(self, key) :
+    return key in self.data
 
   def __len__(self) :
     return len(self.data)
-
-  def clear(self) :
-    self.data.clear()
 
 
 
@@ -95,7 +98,7 @@ class DistributedHash(object) :
       while True :
         yield node
         node = node.next
-        if node == self.__start :
+        if node.id == self.__start.id :
           break
 
   def iterkeys(self) :
