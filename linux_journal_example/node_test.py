@@ -49,6 +49,18 @@ class SimpleTest(unittest.TestCase) :
     self.assertEquals(len(self.distributed_hash), 0)
     self.assertRaises(KeyError, self.distributed_hash.lookup, "foo")
 
+  def testJoin(self) :
+    fill_with_words(self.distributed_hash, 10000)
+    self.assertEquals(len(self.distributed_hash), 10000)
+    old_num_nodes = self.distributed_hash.num_nodes()
+    as_dict = dict((k, self.distributed_hash.lookup(k))
+                   for k in self.distributed_hash.iterkeys())
+    new_node = node.Node()
+    self.distributed_hash.join(new_node)
+    self.assertEquals(len(self.distributed_hash), 10000)
+    self.assertEquals(self.distributed_hash.num_nodes(), old_num_nodes+1)
+    for k, v in as_dict.iteritems() :
+      self.assertEquals(self.distributed_hash.lookup(k), v)
 
 if __name__=="__main__" :
   unittest.main()

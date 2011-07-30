@@ -113,10 +113,19 @@ class DistributedHash(object) :
     for node in _iternodes(self) :
       node.clear()
 
-# def join(start, node) :
-#   predecessor = find_node(start, node.id)
-#   successor = predecessor.next
-#   node.next = successor
+  def num_nodes(self) :
+    return len(list(self._iternodes()))
+
+  def join(self, newnode) :
+    predecessor = self._find_node(newnode.id)
+    successor = predecessor.next
+    newnode.next = successor
+    for k, v in predecessor.iteritems() :
+      if hash_key(k) >= newnode.id :
+        newnode[k] = v
+    predecessor.next = newnode
+    for k in newnode :
+      del predecessor[k]
 
 
 
