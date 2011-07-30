@@ -41,46 +41,72 @@ class Node(object) :
   def __delitem__(self, key) :
     del self.data[key]
 
+  def iterkeys(self) :
+    return self.data.iterkeys()
+
+  def __len__(self) :
+    return len(self.data)
 
 
-# Node finding function taken from <http://www.linuxjournal.com/article/6797>
-def find_node(start, key_hash) :
-  current = start
-  if current.next is None :
-    raise Exception("Node graph corruption: Dangling end")
-  while (distance(current.id, key_hash) >
-         distance(current.next.id, key_hash)) :
-    current = current.next
-  return current
+class DistributedHash(object) :
+  def __init__(self, start=None) :
+    # Start points to the beginning of the list
+    self.__start = start
+
+  # Node finding function taken from <http://www.linuxjournal.com/article/6797>
+  def _find_node(self, key_hash) :
+    current = self.__start
+    if current.next is None :
+      raise Exception("Node graph corruption: Dangling end")
+    while (distance(current.id, key_hash) >
+           distance(current.next.id, key_hash)) :
+      current = current.next
+    return current
+
+  def lookup(self, key) :
+    # Can't just use hash because that might differ between Python
+    # implementations.  Plus by using a different hash function, we
+    # reduce the changes of collisions in the dictionaries in each node
+    # assuming the algorithms are sufficiently different.  And Python's
+    # hashing algorithm is relatively simple, so that's probably the
+    # case.
+    key_hash = hash_key(key)
+    node = self._find_node(key_hash)
+    return node.data[key]
+
+  def store(self, key, value) :
+    key_hash = hash_key(key)
+    node = self._find_node(key_hash)
+    node[key] = value
 
 
-def lookup(start, key) :
-  # Can't just use hash because that might differ between Python
-  # implementations.  Plus by using a different hash function, we
-  # reduce the changes of collisions in the dictionaries in each node
-  # assuming the algorithms are sufficiently different.  And Python's
-  # hashing algorithm is relatively simple, so that's probably the
-  # case.
-  key_hash = hash_key(key)
-  node = find_node(start, key_hash)
-  return node.data[key]
+  def delete(self, key) :
+    key_hash = hash_key(key)
+    node = self._find_node(key_hash)
+    del node[key]
 
+  def _iternodes(self) :
+    node = self.__start
+    if node is not None :
+      while True :
+        yield node
+        node = node.next
+        if node == self.__start :
+          break
 
-def store(start, key, value) :
-  key_hash = hash_key(key)
-  node = find_node(start, key_hash)
-  node[key] = value
+  def iterkeys(self) :
+    for node in self._iternodes() :
+      for k in node.iterkeys() :
+        yield k
 
-
-def delete(start, key) :
-  key_hash = hash_key(key)
-  node = find_node(start, key_hash)
-  del node[key]
+  def __len__(self) :
+    return sum(len(node) for node in self._iternodes())
 
 # def join(start, node) :
 #   predecessor = find_node(start, node.id)
 #   successor = predecessor.next
 #   node.next = successor
+
 
 
 # Clockwise ring function taken from <http://www.linuxjournal.com/article/6797>
@@ -94,3 +120,15 @@ def distance(a, b) :
     return 0
   else :
     return (2**hash_bits) + (b-a)
+
+# Simple list builder for testing
+def construct_list(size) :
+  nodes = [Node() for i in xrange(size)]
+  nodes.sort(key=lambda n: n.id)
+  start = nodes[0]
+  prev = start
+  for node in nodes[1:] :
+    prev.next = node
+    prev = node
+  node.next = start
+  return nodes
