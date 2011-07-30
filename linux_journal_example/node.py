@@ -5,7 +5,7 @@ from collections import MutableMapping
 
 
 
-# This needs a different name.  I don't want to shadow a builtin.
+# I don't want to shadow a builtin, so I'll give it this clumsy name.
 def hash_key(key) :
   """Hash function for finding the appropriate node"""
   return int(hashlib.md5(key).hexdigest(), 16)
