@@ -47,6 +47,10 @@ class Node(object) :
   def __len__(self) :
     return len(self.data)
 
+  def clear(self) :
+    self.data.clear()
+
+
 
 class DistributedHash(object) :
   def __init__(self, start=None) :
@@ -102,6 +106,10 @@ class DistributedHash(object) :
   def __len__(self) :
     return sum(len(node) for node in self._iternodes())
 
+  def clear(self) :
+    for node in _iternodes(self) :
+      node.clear()
+
 # def join(start, node) :
 #   predecessor = find_node(start, node.id)
 #   successor = predecessor.next
@@ -132,3 +140,12 @@ def construct_list(size) :
     prev = node
   node.next = start
   return nodes
+
+# Again a function for testing, we'll build a list using the first n words from
+# the system dictionary
+def fill_with_words(dh, n) :
+  for i, word in enumerate(open("/etc/dictionaries-common/words")) :
+    if i==n :
+      break
+    dh.store(word.strip(), i)
+  return i
