@@ -128,24 +128,3 @@ def distance(a, b) :
     return 0
   else :
     return (2**hash_bits) + (b-a)
-
-# Simple list builder for testing
-def construct_list(size) :
-  nodes = [Node() for i in xrange(size)]
-  nodes.sort(key=lambda n: n.id)
-  start = nodes[0]
-  prev = start
-  for node in nodes[1:] :
-    prev.next = node
-    prev = node
-  node.next = start
-  return nodes
-
-# Again a function for testing, we'll build a list using the first n words from
-# the system dictionary
-def fill_with_words(dh, n) :
-  for i, word in enumerate(open("/etc/dictionaries-common/words")) :
-    if i==n :
-      break
-    dh.store(word.strip(), i)
-  return i
