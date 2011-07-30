@@ -12,9 +12,14 @@ def hash_key(key) :
 # hashing, and the latter for the node ids and the sizes already work.
 hash_bits = 128
 
-
+# I could probably derive from a dictionary, or a MutableMapping base
+# class, but I might need to change too many functions...
 class Node(object) :
   def __init__(self) :
+    # uuid4 is not uniform over 2**128 because hex digit 13 is always
+    # 4, and hex digit 17 is either 8, 9, A, or B.  But since these
+    # are low digits, it shouldn't matter unless the number of nodes
+    # becomes super-large (~2**32 or so)
     self.__uuid = uuid.uuid4()
     self.data = {}
     self.next = None
