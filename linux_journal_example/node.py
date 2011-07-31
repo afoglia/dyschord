@@ -8,27 +8,83 @@ from collections import MutableMapping
 # I don't want to shadow a builtin, so I'll give it this clumsy name.
 def hash_key(key) :
   """Hash function for finding the appropriate node"""
-  return int(hashlib.md5(key).hexdigest(), 16)
+  return int(hashlib.md5(key).hexdigest(), 16) % 2**hash_bits
 # Since both the md5 and uuid are 128-bit, I can use the former for
 # hashing, and the latter for the node ids and the sizes already work.
-hash_bits = 128
+hash_bits = 8
+
+# Keep the finger_table_size small for testing, so I can get my head around it
+finger_table_size = 4
+
+# Surprisingly, chopping to integers after the exponentiation returns
+# better step sizes, although they are no longer powers of two.  (Need
+# to be careful when finger_table_size > hash_bits, there are
+# duplicate step sizes of 0.)
+finger_steps = sorted(set(int(2**((hash_bits-1)*x*1.0/(finger_table_size)))
+                          for x in xrange(finger_table_size+1)))[:-1]
+
+
+
+# Clockwise ring function taken from <http://www.linuxjournal.com/article/6797>
+def distance(a, b) :
+  # k is the number of bits in the ids used.  For a uuid, this is 128
+  # bytes.  If this were C, one would need to worry about overflow,
+  # because 2**128 takes 129 bytes to store.
+  if a < b:
+    return b-a
+  elif a == b :
+    return 0
+  else :
+    return (2**hash_bits) + (b-a)
+
+
+# Node finding function taken from <http://www.linuxjournal.com/article/6797>
+def find_predecessor(start, key_hash) :
+  current = start
+  all_fingers_none = True
+  while True :
+    for finger in reversed(current.fingers) :
+      if finger is None :
+        continue
+      all_fingers_none = False
+      if distance(current.id, key_hash) > distance(finger.id, key_hash) :
+        current = finger
+        break
+    else :
+      return current
+  if all_fingers_none :
+      raise Exception("Node graph corruption: Dangling end")
+  return current
+
+def find_node(start, key_hash) :
+  rslt = find_predecessor(start, key_hash)
+  return rslt.next
+
 
 # I could probably derive from a dictionary, and just add extra
 # properties and methods, but I might need to change too many
 # functions, especially when I want to persist the data to disk.
 class Node(MutableMapping) :
-  def __init__(self) :
+  def __init__(self, id=None) :
     # uuid4 is not uniform over 2**128 because hex digit 13 is always
     # 4, and hex digit 17 is either 8, 9, A, or B.  But since these
     # are low digits, it shouldn't matter unless the number of nodes
     # becomes super-large (~2**32 or so)
-    self.__uuid = uuid.uuid4()
+    if id is None :
+      self.__uuid = uuid.uuid4()
+    else :
+      self.__uuid = uuid.UUID(int=id)
     self.data = {}
-    self.next = None
+    self.fingers = [None for f in finger_steps]
+    self.finger_steps = finger_steps
+
+  @property
+  def next(self) :
+    return self.fingers[0]
 
   @property
   def id(self) :
-    return self.__uuid.int
+    return self.__uuid.int % 2**hash_bits
 
   @property
   def name(self) :
@@ -53,6 +109,10 @@ class Node(MutableMapping) :
   def __len__(self) :
     return len(self.data)
 
+  def update_fingers(self) :
+    for i, step in enumerate(self.finger_steps) :
+      old = self.fingers[i]
+      self.fingers[i] = find_node(old, ((self.id+step-1) % 2**hash_bits))
 
 
 class DistributedHash(object) :
@@ -62,13 +122,7 @@ class DistributedHash(object) :
 
   # Node finding function taken from <http://www.linuxjournal.com/article/6797>
   def _find_node(self, key_hash) :
-    current = self.__start
-    if current.next is None :
-      raise Exception("Node graph corruption: Dangling end")
-    while (distance(current.id, key_hash) >
-           distance(current.next.id, key_hash)) :
-      current = current.next
-    return current
+    return find_node(self.__start, key_hash)
 
   def lookup(self, key) :
     # Can't just use hash because that might differ between Python
@@ -94,8 +148,12 @@ class DistributedHash(object) :
 
   def _iternodes(self) :
     node = self.__start
+    seen = set()
     if node is not None :
       while True :
+        if node.id in seen :
+          raise Exception("Infinite loop.  Seen %s twice" % node.id)
+        seen.add(node.id)
         yield node
         node = node.next
         if node.id == self.__start.id :
@@ -117,44 +175,53 @@ class DistributedHash(object) :
     return len(list(self._iternodes()))
 
   def join(self, newnode) :
-    predecessor = self._find_node(newnode.id)
+    # Base case: First node
+    if self.__start is None :
+      self.__start = newnode
+      self.__start.fingers = [newnode]*len(self.__start.fingers)
+      return
+
+    predecessor = find_predecessor(self.__start, newnode.id)
+    if predecessor.id == newnode.id :
+      raise Exception("Node already exists with same id")
+    # Start with all fingers pointing to the predecessor, then update
+    newnode.fingers = list(predecessor.fingers)
+    newnode.update_fingers()
+
     successor = predecessor.next
-    newnode.next = successor
-    for k, v in predecessor.iteritems() :
-      if hash_key(k) >= newnode.id :
+    for k, v in successor.iteritems() :
+      if (distance(newnode.id, hash_key(k)) >
+          distance(successor.id, hash_key(k))) :
         newnode[k] = v
-    predecessor.next = newnode
+    predecessor.fingers[0] = newnode
+    predecessor.update_fingers()
     for k in newnode :
-      del predecessor[k]
+      del successor[k]
 
   def leave(self, node) :
-    predecessor = None
-    for n in self._iternodes() :
-      if n.id == node.id :
-        break
-      predecessor = n
-    else :
-      # Node already gone.  Maybe log the missing node, but work is done
+    if self.num_nodes() == 0 :
       return
-    if predecessor is None :
-      # removing first node, so set predecessor to end
-      for predecessor in self._iternodes() :
-        pass
-      self.__start = self.__start.next
-    for k, v in node.iteritems() :
-      predecessor[k] = v
-    predecessor.next = n.next
-    node.next = None
 
+    predecessor = find_predecessor(self.__start, (node.id-1) % 2**hash_bits)
+    if predecessor.next.id != node.id :
+      # No joined node with this id.  Maybe log the missing node, but
+      # work is done
+      return
+    
+    leaving = predecessor.next
+    successor = leaving.next
 
-# Clockwise ring function taken from <http://www.linuxjournal.com/article/6797>
-def distance(a, b) :
-  # k is the number of bits in the ids used.  For a uuid, this is 128
-  # bytes.  If this were C, one would need to worry about overflow,
-  # because 2**128 takes 129 bytes to store.
-  if a < b:
-    return b-a
-  elif a == b :
-    return 0
-  else :
-    return (2**hash_bits) + (b-a)
+    # Check we aren't removing first item
+    if leaving.id == self.__start.id :
+      self.__start = successor
+
+    successor.update(leaving)
+
+    for remaining_node in self._iternodes() :
+      if remaining_node is not leaving :
+        remaining_node.fingers = [
+          finger if finger.id != leaving.id else successor
+          for finger in remaining_node.fingers]
+
+    for remaining_node in self._iternodes() :
+      remaining_node.update_fingers()

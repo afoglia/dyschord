@@ -5,32 +5,35 @@ import unittest
 import node
 
 
-# Simple list builder for testing
-def construct_list(size) :
-  nodes = [node.Node() for i in xrange(size)]
-  nodes.sort(key=lambda n: n.id)
-  start = nodes[0]
-  prev = start
-  for n in nodes[1:] :
-    prev.next = n
-    prev = n
-  n.next = start
-  return nodes
+# Simple DistributedHash builder for testing
+def construct_dh(size) :
+  nodes = {}
+  while len(nodes) != size :
+    new_node = node.Node()
+    nodes[new_node.id] = new_node
+  rslt = node.DistributedHash()
+  for n in nodes.itervalues() :
+    rslt.join(n)
+  return node.DistributedHash(n)
 
 # Again a function for testing, we'll build a list using the first n words from
 # the system dictionary
 def fill_with_words(dh, n) :
-  for i, word in enumerate(open("/etc/dictionaries-common/words")) :
-    if i==n :
-      break
+  i = 0
+  for word in open("/etc/dictionaries-common/words") :
+    word = word.strip()
+    if not word :
+      continue
     dh.store(word.strip(), i)
+    i += 1
+    if i == n:
+      break
   return i
 
 
 class SimpleTest(unittest.TestCase) :
   def setUp(self) :
-    nodes = construct_list(10)
-    self.distributed_hash = node.DistributedHash(nodes[0])
+    self.distributed_hash = construct_dh(100)
 
   def testOneValue(self) :
     self.assertEquals(len(self.distributed_hash), 0)
@@ -49,30 +52,48 @@ class SimpleTest(unittest.TestCase) :
     self.assertEquals(len(self.distributed_hash), 0)
     self.assertRaises(KeyError, self.distributed_hash.lookup, "foo")
 
+  def testJoinPreExisting(self) :
+    distributed_hash = node.DistributedHash()
+    n = node.Node(1)
+    distributed_hash.join(n)
+    self.assertRaises(Exception, distributed_hash.join, n)
+    
   def testJoin(self) :
-    fill_with_words(self.distributed_hash, 10000)
-    self.assertEquals(len(self.distributed_hash), 10000)
+    size = 10000
+    fill_with_words(self.distributed_hash, size)
+    self.assertEquals(len(self.distributed_hash), size)
     old_num_nodes = self.distributed_hash.num_nodes()
+    old_len = len(self.distributed_hash)
     as_dict = dict((k, self.distributed_hash.lookup(k))
                    for k in self.distributed_hash.iterkeys())
-    new_node = node.Node()
+    existing_nodes = set(n.id for n in self.distributed_hash._iternodes())
+    while True :
+      new_node = node.Node()
+      if new_node.id not in existing_nodes :
+        break
     self.distributed_hash.join(new_node)
-    self.assertEquals(len(self.distributed_hash), 10000)
+    self.assertEquals(len(self.distributed_hash), size)
     self.assertEquals(self.distributed_hash.num_nodes(), old_num_nodes+1)
+    self.assertEquals(len(self.distributed_hash), old_len)
     for k, v in as_dict.iteritems() :
       self.assertEquals(self.distributed_hash.lookup(k), v)
 
+  # Need a test for adding a node with id just below the current
+  # lowest, to make sure that the code properly partitions all the
+  # data.
+      
   def testLeaveNoncontained(self) :
-    self.assertEquals(self.distributed_hash.leave(node.Node()), None)
+    self.assertEquals(node.DistributedHash().leave(node.Node()), None)
 
   def testLeaveNonfirst(self) :
-    fill_with_words(self.distributed_hash, 10000)
+    size = 10
+    fill_with_words(self.distributed_hash, size)
     old_num_nodes = self.distributed_hash.num_nodes()
     as_dict = dict((k, self.distributed_hash.lookup(k))
                    for k in self.distributed_hash.iterkeys())
     parting = list(self.distributed_hash._iternodes())[(1+old_num_nodes)/2]
     self.distributed_hash.leave(parting)
-    self.assertEqual(len(self.distributed_hash), 10000)
+    self.assertEqual(len(self.distributed_hash), size)
     self.assertEquals(self.distributed_hash.num_nodes(), old_num_nodes-1)
     for k, v in as_dict.iteritems() :
       self.assertEquals(self.distributed_hash.lookup(k), v)
