@@ -74,6 +74,7 @@ class Node(MutableMapping) :
       self.__uuid = uuid.uuid4()
     else :
       self.__uuid = uuid.UUID(int=id)
+    self.__id = self.__uuid.int % 2**hash_bits
     self.data = {}
     self.fingers = [None for f in finger_steps]
     self.finger_steps = finger_steps
@@ -84,7 +85,7 @@ class Node(MutableMapping) :
 
   @property
   def id(self) :
-    return self.__uuid.int % 2**hash_bits
+    return self.__id
 
   @property
   def name(self) :
