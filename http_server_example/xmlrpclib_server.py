@@ -3,10 +3,14 @@
 # Example of xmlrpclib library from The Python Standard Library by
 # Example, Sections 12.10 and 12.11
 
+from __future__ import with_statement
+
 from SimpleXMLRPCServer import SimpleXMLRPCServer
 from SocketServer import ThreadingMixIn
 from xmlrpclib import Binary
 import datetime
+
+from readwritelock import RWLock
 
 # Threaded XML RPC Server
 class ThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer) :
@@ -24,19 +28,22 @@ import time
 class ExampleService:
   def __init__(self) :
     self.data = {'a': 0, 'b': 1}
+    self._lock = RWLock()
 
   def store(self, key, value, wait) :
-    print "Got request to append:", value
-    time.sleep(wait)
-    self.data[key] = value
+    with self._lock.wrlocked() :
+      print "Got request to append:", value
+      time.sleep(wait)
+      self.data[key] = value
 
   def list(self, delay) :
-    print "Returning values:"
-    rslt = []
-    for k in self.data :
-      rslt.append(k)
-      time.sleep(delay)
-    return rslt
+    with self._lock.rdlocked() :
+      print "Returning values:"
+      rslt = []
+      for k in self.data :
+        rslt.append(k)
+        time.sleep(delay)
+      return rslt
 
   def ping(self) :
     """Simple function to respond when called to demonstrate connectivity."""
