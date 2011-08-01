@@ -11,10 +11,10 @@ def hash_key(key) :
   return int(hashlib.md5(key).hexdigest(), 16) % 2**hash_bits
 # Since both the md5 and uuid are 128-bit, I can use the former for
 # hashing, and the latter for the node ids and the sizes already work.
-hash_bits = 8
+hash_bits = 128
 
 # Keep the finger_table_size small for testing, so I can get my head around it
-finger_table_size = 4
+finger_table_size = 128
 
 # Surprisingly, chopping to integers after the exponentiation returns
 # better step sizes, although they are no longer powers of two.  (Need
@@ -54,6 +54,17 @@ def find_predecessor(start, key_hash) :
       return current
   if all_fingers_none :
       raise Exception("Node graph corruption: Dangling end")
+  return current
+
+# Non-finger-based lookup logic, so I can replace the new logic with
+# the old for timing purposes.
+def find_predecessor_without_fingers(start, key_hash) :
+  current = start
+  while True :
+    if distance(current.id, key_hash) > distance(current.next.id, key_hash) :
+      current = current.next
+    else :
+      break
   return current
 
 def find_node(start, key_hash) :
@@ -115,6 +126,16 @@ class Node(MutableMapping) :
       old = self.fingers[i]
       self.fingers[i] = find_node(old, ((self.id+step-1) % 2**hash_bits))
 
+  def update_fingers_on_insert(self, newnode) :
+    # Faster updating when new node is added.
+    for i, step in enumerate(self.finger_steps) :
+      if distance(self.id, self.fingers[i].id) < distance(self.id, newnode.id) :
+        continue
+      old = self.fingers[i]
+      self.fingers[i] = find_node(old, ((self.id+step-1) % 2**hash_bits))
+      if self.fingers[i].id == old.id :
+        break
+
 
 class DistributedHash(object) :
   def __init__(self, start=None) :
@@ -147,8 +168,8 @@ class DistributedHash(object) :
     node = self._find_node(key_hash)
     del node[key]
 
-  def _iternodes(self) :
-    node = self.__start
+  def _iternodes(self, start=None) :
+    node = start if start is not None else self.__start
     seen = set()
     if node is not None :
       while True :
@@ -195,9 +216,23 @@ class DistributedHash(object) :
           distance(successor.id, hash_key(k))) :
         newnode[k] = v
     predecessor.fingers[0] = newnode
-    predecessor.update_fingers()
+
+    # Update fingers of other nodes.
+    #
+    # (a) only nodes from new_node._id - max(finger_step) to predecessor
+    # can possible have changes
+    #
+    # (b) for each node, only fingers that are from 1 to (new_node._id
+    # - node._id) need to change.
+    for node in self._iternodes(
+      find_predecessor(newnode, newnode.id - max(newnode.finger_steps))) :
+      if node.id == newnode.id :
+        break
+      node.update_fingers_on_insert(newnode)
+
     for k in newnode :
       del successor[k]
+
 
   def leave(self, node) :
     if self.num_nodes() == 0 :
@@ -218,6 +253,10 @@ class DistributedHash(object) :
 
     successor.update(leaving)
 
+    # Can update this by not call update fingers on all nodes, but
+    # only on those that had the leaving node.  In fact, I don't think
+    # I need to update the fingers at all, other than replacing all
+    # fingers to the leaving to the sucessor.
     for remaining_node in self._iternodes() :
       if remaining_node is not leaving :
         remaining_node.fingers = [
