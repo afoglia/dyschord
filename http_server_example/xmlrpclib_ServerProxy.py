@@ -5,5 +5,5 @@
 
 import xmlrpclib  
 
-server = xmlrpclib.ServerProxy("http://localhost:9000")
+server = xmlrpclib.ServerProxy("http://localhost:9000", verbose=True)
 print "Ping:", server.ping()
