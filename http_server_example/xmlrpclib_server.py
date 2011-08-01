@@ -4,16 +4,40 @@
 # Example, Sections 12.10 and 12.11
 
 from SimpleXMLRPCServer import SimpleXMLRPCServer
+from SocketServer import ThreadingMixIn
 from xmlrpclib import Binary
 import datetime
 
-server = SimpleXMLRPCServer(("localhost", 9000),
-                            logRequests=True,
-                            allow_none=True)
+# Threaded XML RPC Server
+class ThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer) :
+  """Threading XML-RPC Server"""
+
+
+server = ThreadedXMLRPCServer(("localhost", 9000),
+                              logRequests=True,
+                              allow_none=True)
 server.register_introspection_functions()
 server.register_multicall_functions()
 
+import time
+
 class ExampleService:
+  def __init__(self) :
+    self.data = {'a': 0, 'b': 1}
+
+  def store(self, key, value, wait) :
+    print "Got request to append:", value
+    time.sleep(wait)
+    self.data[key] = value
+
+  def list(self, delay) :
+    print "Returning values:"
+    rslt = []
+    for k in self.data :
+      rslt.append(k)
+      time.sleep(delay)
+    return rslt
+
   def ping(self) :
     """Simple function to respond when called to demonstrate connectivity."""
     return True
