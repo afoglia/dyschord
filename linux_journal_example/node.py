@@ -1,6 +1,7 @@
 # Heavily based on example at <http://www.linuxjournal.com/article/6797>
 import hashlib
 import uuid
+import bisect
 from collections import MutableMapping
 
 
@@ -41,20 +42,39 @@ def distance(a, b) :
 # Node finding function taken from <http://www.linuxjournal.com/article/6797>
 def find_predecessor(start, key_hash) :
   current = start
-  all_fingers_none = True
   while True :
-    for finger in reversed(current.fingers) :
-      if finger is None :
-        continue
-      all_fingers_none = False
-      if distance(current.id, key_hash) > distance(finger.id, key_hash) :
+    current_distance = distance(current.id, key_hash)
+    # Can speed up by not checking all fingers, and use the finger
+    # step size to narrow down which finger it is.
+    if current_distance == 0 :
+      return current
+    idx = bisect.bisect_right(current.finger_steps, current_distance)
+    idx -= 1
+    if idx < 0 :
+      return current
+    finger = current.fingers[idx]
+    while idx >= 0 :
+      # print "idx =", idx
+      while finger is None :
+        # Possible node corruption
+        idx -= 1
+        if idx < 0 :
+          # We've gone through all the fingers before where we should
+          # go, and they're not pointing to anything.  Possibly can
+          # recover if some of the longer fingers are not None, but
+          # won't worry about that now.
+          raise Exception("Node graph corruption: Dangling end")
+        finger = current.fingers[idx]
+      if current_distance > distance(finger.id, key_hash) :
         current = finger
         break
+      else :
+          idx -= 1
+          finger = current.fingers[idx]
     else :
       return current
-  if all_fingers_none :
-      raise Exception("Node graph corruption: Dangling end")
   return current
+
 
 # Non-finger-based lookup logic, so I can replace the new logic with
 # the old for timing purposes.
