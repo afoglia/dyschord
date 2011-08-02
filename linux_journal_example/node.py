@@ -87,6 +87,7 @@ class Node(MutableMapping) :
       self.__uuid = uuid.UUID(int=id)
     self.__id = self.__uuid.int % 2**hash_bits
     self.data = {}
+    self.predecessor = None
     self.fingers = [None for f in finger_steps]
     self.finger_steps = finger_steps
 
@@ -207,6 +208,7 @@ class DistributedHash(object) :
     if predecessor.id == newnode.id :
       raise Exception("Node already exists with same id")
     # Start with all fingers pointing to the predecessor, then update
+    newnode.predecessor = predecessor
     newnode.fingers = list(predecessor.fingers)
     newnode.update_fingers()
 
@@ -216,6 +218,7 @@ class DistributedHash(object) :
           distance(successor.id, hash_key(k))) :
         newnode[k] = v
     predecessor.fingers[0] = newnode
+    successor.predecessor = newnode
 
     # Update fingers of other nodes.
     #
@@ -238,7 +241,10 @@ class DistributedHash(object) :
     if self.num_nodes() == 0 :
       return
 
-    predecessor = find_predecessor(self.__start, (node.id-1) % 2**hash_bits)
+    # Note I am looking up, because then I can get a node to leave by
+    # passing in another instance with the same id.  Might be useful
+    # for testing.
+    predecessor = find_predecessor(self.__start, node.id).predecessor
     if predecessor.next.id != node.id :
       # No joined node with this id.  Maybe log the missing node, but
       # work is done
@@ -251,6 +257,7 @@ class DistributedHash(object) :
     if leaving.id == self.__start.id :
       self.__start = successor
 
+    # Copy data from leaving node
     successor.update(leaving)
 
     # Can update this by not call update fingers on all nodes, but
@@ -263,5 +270,6 @@ class DistributedHash(object) :
           finger if finger.id != leaving.id else successor
           for finger in remaining_node.fingers]
 
+    successor.predecessor = predecessor
     for remaining_node in self._iternodes() :
       remaining_node.update_fingers()
