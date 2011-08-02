@@ -31,26 +31,48 @@ def fill_with_words(dh, n) :
   return i
 
 
+def dump_distributed_hash(dh) :
+  for node in dh._iternodes() :
+    print node.id, node.next.id, len(node)
+
 class SimpleTest(unittest.TestCase) :
   def setUp(self) :
-    self.distributed_hash = construct_dh(100)
+    self._orig_settings = {}
+    new_settings = {"hash_bits": 4,
+                    "hash_key" : (lambda k : k % 2**4),
+                    "finger_table_size": 1}
+    for k, v in new_settings.iteritems() :
+      self._orig_settings[k] = getattr(dyschord, k)
+      setattr(dyschord, k, v)
+    self.distributed_hash = construct_dh(5)
 
+  def tearDown(self) :
+    self.distributed_hash = None
+    for k, v in self._orig_settings.iteritems() :
+      setattr(dyschord, k, v)
+      
   def testOneValue(self) :
     self.assertEquals(len(self.distributed_hash), 0)
-    self.distributed_hash.store("foo", 0)
-    self.assertEquals(len(self.distributed_hash), 1)    
-    self.assertEquals(self.distributed_hash.lookup("foo"), 0)
+    self.distributed_hash.store(0, "zero")
+    self.assertEquals(len(self.distributed_hash), 1)
+    self.assertEquals(self.distributed_hash.lookup(0), "zero")
 
   def testLookupMissing(self) :
-    self.assertRaises(KeyError, self.distributed_hash.lookup, "spam")
+    self.assertRaises(KeyError, self.distributed_hash.lookup, 0)
 
   def testDeletion(self) :
     self.assertEquals(len(self.distributed_hash), 0)
-    self.distributed_hash.store("foo", 0)
+    self.distributed_hash.store(0, "zero")
     self.assertEquals(len(self.distributed_hash), 1)
-    self.distributed_hash.delete("foo")
+    self.distributed_hash.delete(0)
     self.assertEquals(len(self.distributed_hash), 0)
-    self.assertRaises(KeyError, self.distributed_hash.lookup, "foo")
+    self.assertRaises(KeyError, self.distributed_hash.lookup, 0)
+
+    
+class WordsTest(unittest.TestCase) :
+  def setUp(self) :
+    self.distributed_hash = construct_dh(10)
+
 
   def testJoinPreExisting(self) :
     distributed_hash = dyschord.DistributedHash()
