@@ -21,8 +21,9 @@ finger_table_size = 128
 # better step sizes, although they are no longer powers of two.  (Need
 # to be careful when finger_table_size > hash_bits, there are
 # duplicate step sizes of 0.)
-finger_steps = sorted(set(int(2**((hash_bits-1)*x*1.0/(finger_table_size)))
-                          for x in xrange(finger_table_size+1)))[:-1]
+def computer_finger_steps(hash_bits, finger_table_size) :
+  return sorted(set(int(2**((hash_bits-1)*x*1.0/(finger_table_size)))
+                    for x in xrange(finger_table_size+1)))[:-1]
 
 
 
@@ -108,8 +109,8 @@ class Node(MutableMapping) :
     self.__id = self.__uuid.int % 2**hash_bits
     self.data = {}
     self.predecessor = None
-    self.fingers = [None for f in finger_steps]
-    self.finger_steps = finger_steps
+    self.finger_steps = computer_finger_steps(hash_bits, finger_table_size)
+    self.fingers = [None for f in self.finger_steps]
 
   @property
   def next(self) :
