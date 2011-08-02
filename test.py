@@ -30,26 +30,53 @@ def fill_with_words(dh, n) :
       break
   return i
 
+# Really this can be used for anything, but it's such a naive
+# patching, for anything more complicated, I'd rather use a library
+# developed by someone else.
+def patch_dyschord(settings=dict(), module=dyschord) :
+  orig_settings = {}
+  for k, v in settings.iteritems() :
+    orig_settings[k] = getattr(module, k)
+    setattr(module, k, v)
+  return orig_settings
+
+simple_hash = {"hash_bits": 4,
+               "hash_key" : (lambda k : k % 2**4),
+               "finger_table_size": 1}
+
 
 def dump_distributed_hash(dh) :
   for node in dh._iternodes() :
     print node.id, node.next.id, len(node)
 
+
+class ConstructionTest(unittest.TestCase) :
+  def setUp(self) :
+    self._orig_settings = patch_dyschord(settings=simple_hash)
+    self.nodes = [dyschord.Node(i) for i in (0, 3, 8)]
+
+  def testJoin(self) :
+    dh = dyschord.DistributedHash()
+    self.assertEquals(dh.num_nodes(), 0)
+    print
+    for i, node in enumerate(self.nodes) :
+      dh.join(node)
+      print [(n.id, n.next.id if n.next is not None else None)
+             for n in self.nodes]
+      self.assertEquals(dh.num_nodes(), i+1)
+
+  def tearDown(self) :
+    patch_dyschord(self._orig_settings)
+
+
 class SimpleTest(unittest.TestCase) :
   def setUp(self) :
-    self._orig_settings = {}
-    new_settings = {"hash_bits": 4,
-                    "hash_key" : (lambda k : k % 2**4),
-                    "finger_table_size": 1}
-    for k, v in new_settings.iteritems() :
-      self._orig_settings[k] = getattr(dyschord, k)
-      setattr(dyschord, k, v)
+    self._orig_settings = patch_dyschord(simple_hash)
     self.distributed_hash = construct_dh(5)
 
   def tearDown(self) :
     self.distributed_hash = None
-    for k, v in self._orig_settings.iteritems() :
-      setattr(dyschord, k, v)
+    patch_dyschord(self._orig_settings)
       
   def testOneValue(self) :
     self.assertEquals(len(self.distributed_hash), 0)
@@ -68,18 +95,19 @@ class SimpleTest(unittest.TestCase) :
     self.assertEquals(len(self.distributed_hash), 0)
     self.assertRaises(KeyError, self.distributed_hash.lookup, 0)
 
-    
-class WordsTest(unittest.TestCase) :
-  def setUp(self) :
-    self.distributed_hash = construct_dh(10)
-
-
   def testJoinPreExisting(self) :
     distributed_hash = dyschord.DistributedHash()
     n = dyschord.Node(1)
     distributed_hash.join(n)
     self.assertRaises(Exception, distributed_hash.join, n)
     
+
+
+class WordsTest(unittest.TestCase) :
+  def setUp(self) :
+    self.distributed_hash = construct_dh(10)
+
+
   def testJoin(self) :
     size = 10000
     fill_with_words(self.distributed_hash, size)
