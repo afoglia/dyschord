@@ -143,6 +143,31 @@ class Node(MutableMapping) :
   def __len__(self) :
     return len(self.data)
 
+  def _iternodes(self) :
+    seen = set()
+    node = self
+    while True :
+      if node.id in seen :
+        raise Exception("Infinite loop.  Seen %s twice" % node.id)
+      seen.add(node.id)
+      yield node
+      node = node.next
+      if node.id == self.id :
+        break
+
+
+  # def find_successor(self, key_hash) :
+  #   if distance(self.id, key_hash) >= distance(self.predecessor.id, key_hash) :
+  #     return self
+  #   else :
+  #     return self.closest_preceding_node(key_hash).find_successor(key_hash)
+
+  # def closest_preceding_node(self, key_hash) :
+  #   for finger in reversed(self.fingers) :
+  #     if distance(finger.id, key_hash) > distance(self.id, key_hash) :
+  #       return finger
+  #   return self
+
   def update_fingers(self) :
     for i, step in enumerate(self.finger_steps) :
       old = self.fingers[i]
@@ -191,17 +216,9 @@ class DistributedHash(object) :
     del node[key]
 
   def _iternodes(self, start=None) :
-    node = start if start is not None else self.__start
-    seen = set()
-    if node is not None :
-      while True :
-        if node.id in seen :
-          raise Exception("Infinite loop.  Seen %s twice" % node.id)
-        seen.add(node.id)
-        yield node
-        node = node.next
-        if node.id == self.__start.id :
-          break
+    if self.__start is None :
+      return []
+    return self.__start._iternodes()
 
   def iterkeys(self) :
     for node in self._iternodes() :
@@ -212,7 +229,7 @@ class DistributedHash(object) :
     return sum(len(node) for node in self._iternodes())
 
   def clear(self) :
-    for node in _iternodes(self) :
+    for node in self._iternodes() :
       node.clear()
 
   def num_nodes(self) :
@@ -248,8 +265,8 @@ class DistributedHash(object) :
     #
     # (b) for each node, only fingers that are from 1 to (new_node._id
     # - node._id) need to change.
-    for node in self._iternodes(
-      find_predecessor(newnode, newnode.id - max(newnode.finger_steps))) :
+    for node in find_predecessor(
+      newnode, newnode.id - max(newnode.finger_steps))._iternodes() :
       if node.id == newnode.id :
         break
       node.update_fingers_on_insert(newnode)
