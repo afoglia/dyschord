@@ -53,6 +53,7 @@ def start(port) :
     print "Use Contrl-C to exit"
     server.serve_forever()
   except KeyboardInterrupt :
+    server.close()
     print "Exiting"
 
 import optparse
