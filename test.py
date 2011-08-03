@@ -61,8 +61,8 @@ class ConstructionTest(unittest.TestCase) :
     print
     for i, node in enumerate(self.nodes) :
       dh.join(node)
-      print [(n.id, n.next.id if n.next is not None else None)
-             for n in self.nodes]
+      # print [(n.id, n.next.id if n.next is not None else None)
+      #        for n in self.nodes]
       self.assertEquals(dh.num_nodes(), i+1)
 
   def tearDown(self) :
