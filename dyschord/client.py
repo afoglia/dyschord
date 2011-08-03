@@ -14,7 +14,7 @@ class NodeProxy(object) :
       ping = self.server.ping()
       self.__id = int(ping["id"])
     
-  def close() :
+  def close(self) :
     self.server("close")()
 
     
