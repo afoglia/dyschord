@@ -150,7 +150,7 @@ class Node(MutableMapping) :
   @property
   def name(self) :
     return str(self.__uuid)
-
+   
   def __getitem__(self, key) :
     return self.data[key]
 
@@ -169,19 +169,6 @@ class Node(MutableMapping) :
 
   def __len__(self) :
     return len(self.data)
-
-  def _iternodes(self) :
-    seen = set()
-    node = self
-    while True :
-      if node.id in seen :
-        raise Exception("Infinite loop.  Seen %s twice" % node.id)
-      seen.add(node.id)
-      yield node
-      node = node.next
-      if node.id == self.id :
-        break
-
 
   # def find_successor(self, key_hash) :
   #   if distance(self.id, key_hash) >= distance(self.predecessor.id, key_hash) :
@@ -214,14 +201,23 @@ class Node(MutableMapping) :
         break
 
 
+def iternodes(start) :
+  seen = set()
+  node = start
+  while True :
+    if node.id in seen :
+      raise Exception("Infinite loop.  Seen %s twice" % node.id)
+    seen.add(node.id)
+    yield node
+    node = node.next
+    if node.id == start.id :
+      break
+
+
 class DistributedHash(object) :
   def __init__(self, start=None) :
     # Start points to the beginning of the list
     self.__start = start
-
-  # Node finding function taken from <http://www.linuxjournal.com/article/6797>
-  def _find_node(self, key_hash) :
-    return find_node(self.__start, key_hash)
 
   def lookup(self, key) :
     # Can't just use hash because that might differ between Python
@@ -231,24 +227,24 @@ class DistributedHash(object) :
     # hashing algorithm is relatively simple, so that's probably the
     # case.
     key_hash = self.__start.hash_key(key)
-    node = self._find_node(key_hash)
+    node = find_node(self.__start, key_hash)
     return node.data[key]
 
   def store(self, key, value) :
     key_hash = self.__start.hash_key(key)
-    node = self._find_node(key_hash)
+    node = find_node(self.__start, key_hash)
     node[key] = value
 
 
   def delete(self, key) :
     key_hash = self.__start.hash_key(key)
-    node = self._find_node(key_hash)
+    node = find_node(self.__start, key_hash)
     del node[key]
 
   def _iternodes(self, start=None) :
     if self.__start is None :
       return []
-    return self.__start._iternodes()
+    return iternodes(self.__start)
 
   def iterkeys(self) :
     for node in self._iternodes() :
@@ -295,8 +291,8 @@ class DistributedHash(object) :
     #
     # (b) for each node, only fingers that are from 1 to (new_node._id
     # - node._id) need to change.
-    for node in find_predecessor(
-      newnode, newnode.id - max(newnode.finger_steps))._iternodes() :
+    for node in iternodes(find_predecessor(
+      newnode, newnode.id - max(newnode.finger_steps))) :
       if node.id == newnode.id :
         break
       node.update_fingers_on_insert(newnode)
