@@ -5,14 +5,40 @@ import bisect
 from collections import MutableMapping
 
 
+class Md5Metric(object) :
+  # Since both the md5 and uuid are 128-bit, I can use the former for
+  # hashing, and the latter for the node ids and the sizes already work.
 
-# I don't want to shadow a builtin, so I'll give it this clumsy name.
-def hash_key(key) :
-  """Hash function for finding the appropriate node"""
-  return int(hashlib.md5(key).hexdigest(), 16) % 2**hash_bits
-# Since both the md5 and uuid are 128-bit, I can use the former for
-# hashing, and the latter for the node ids and the sizes already work.
-hash_bits = 128
+  def __init__(self, hash_bits=128) :
+    self.hash_bits = 128
+
+  # I don't want to shadow a builtin, so I'll give it this clumsy name.
+  def hash_key(self, key) :
+    """Hash function for finding the appropriate node"""
+    return int(hashlib.md5(key).hexdigest(), 16) % 2**self.hash_bits
+
+
+  # Clockwise ring function taken from
+  # <http://www.linuxjournal.com/article/6797>
+  def distance(self, a, b) :
+    # k is the number of bits in the ids used.  For a uuid, this is 128
+    # bytes.  If this were C, one would need to worry about overflow,
+    # because 2**128 takes 129 bytes to store.
+    if a < b:
+      return b-a
+    elif a == b :
+      return 0
+    else :
+      return (2**self.hash_bits) + (b-a)
+
+class TrivialMetric(Md5Metric) :
+  def __init__(self, hash_bits) :
+    Md5Metric.__init__(self, hash_bits)
+
+  def hash_key(self, key) :
+    return key % 2**self.hash_bits
+
+
 
 # Keep the finger_table_size small for testing, so I can get my head around it
 finger_table_size = 128
@@ -27,24 +53,12 @@ def computer_finger_steps(hash_bits, finger_table_size) :
 
 
 
-# Clockwise ring function taken from <http://www.linuxjournal.com/article/6797>
-def distance(a, b) :
-  # k is the number of bits in the ids used.  For a uuid, this is 128
-  # bytes.  If this were C, one would need to worry about overflow,
-  # because 2**128 takes 129 bytes to store.
-  if a < b:
-    return b-a
-  elif a == b :
-    return 0
-  else :
-    return (2**hash_bits) + (b-a)
-
 
 # Node finding function taken from <http://www.linuxjournal.com/article/6797>
 def find_predecessor(start, key_hash) :
   current = start
   while True :
-    current_distance = distance(current.id, key_hash)
+    current_distance = current.distance(current.id, key_hash)
     # Can speed up by not checking all fingers, and use the finger
     # step size to narrow down which finger it is.
     if current_distance == 0 :
@@ -66,7 +80,7 @@ def find_predecessor(start, key_hash) :
           # won't worry about that now.
           raise Exception("Node graph corruption: Dangling end")
         finger = current.fingers[idx]
-      if current_distance > distance(finger.id, key_hash) :
+      if current_distance > current.distance(finger.id, key_hash) :
         current = finger
         break
       else :
@@ -82,7 +96,8 @@ def find_predecessor(start, key_hash) :
 def find_predecessor_without_fingers(start, key_hash) :
   current = start
   while True :
-    if distance(current.id, key_hash) > distance(current.next.id, key_hash) :
+    if (current.distance(current.id, key_hash)
+        > current.distance(current.next.id, key_hash)) :
       current = current.next
     else :
       break
@@ -97,7 +112,9 @@ def find_node(start, key_hash) :
 # properties and methods, but I might need to change too many
 # functions, especially when I want to persist the data to disk.
 class Node(MutableMapping) :
-  def __init__(self, id=None) :
+  def __init__(self, id=None, nfingers=None, metric=None) :
+    # nfingers   None means default
+
     # uuid4 is not uniform over 2**128 because hex digit 13 is always
     # 4, and hex digit 17 is either 8, 9, A, or B.  But since these
     # are low digits, it shouldn't matter unless the number of nodes
@@ -106,11 +123,21 @@ class Node(MutableMapping) :
       self.__uuid = uuid.uuid4()
     else :
       self.__uuid = uuid.UUID(int=id)
-    self.__id = self.__uuid.int % 2**hash_bits
+    self.__metric = metric if metric else Md5Metric()
+    self.__id = self.__uuid.int % 2**self.__metric.hash_bits
     self.data = {}
     self.predecessor = None
-    self.finger_steps = computer_finger_steps(hash_bits, finger_table_size)
+    self.finger_steps = computer_finger_steps(
+      self.__metric.hash_bits, finger_table_size)
     self.fingers = [None for f in self.finger_steps]
+
+  @property
+  def distance(self) :
+    return self.__metric.distance
+
+  @property
+  def hash_key(self) :
+    return self.__metric.hash_key
 
   @property
   def next(self) :
@@ -171,15 +198,18 @@ class Node(MutableMapping) :
   def update_fingers(self) :
     for i, step in enumerate(self.finger_steps) :
       old = self.fingers[i]
-      self.fingers[i] = find_node(old, ((self.id+step-1) % 2**hash_bits))
+      self.fingers[i] = find_node(old, ((self.id+step-1)
+                                        % 2**self.__metric.hash_bits))
 
   def update_fingers_on_insert(self, newnode) :
     # Faster updating when new node is added.
     for i, step in enumerate(self.finger_steps) :
-      if distance(self.id, self.fingers[i].id) < distance(self.id, newnode.id) :
+      if (self.distance(self.id, self.fingers[i].id)
+          < self.distance(self.id, newnode.id)) :
         continue
       old = self.fingers[i]
-      self.fingers[i] = find_node(old, ((self.id+step-1) % 2**hash_bits))
+      self.fingers[i] = find_node(old, ((self.id+step-1)
+                                        % 2**self.__metric.hash_bits))
       if self.fingers[i].id == old.id :
         break
 
@@ -200,18 +230,18 @@ class DistributedHash(object) :
     # assuming the algorithms are sufficiently different.  And Python's
     # hashing algorithm is relatively simple, so that's probably the
     # case.
-    key_hash = hash_key(key)
+    key_hash = self.__start.hash_key(key)
     node = self._find_node(key_hash)
     return node.data[key]
 
   def store(self, key, value) :
-    key_hash = hash_key(key)
+    key_hash = self.__start.hash_key(key)
     node = self._find_node(key_hash)
     node[key] = value
 
 
   def delete(self, key) :
-    key_hash = hash_key(key)
+    key_hash = self.__start.hash_key(key)
     node = self._find_node(key_hash)
     del node[key]
 
@@ -252,8 +282,8 @@ class DistributedHash(object) :
 
     successor = predecessor.next
     for k, v in successor.iteritems() :
-      if (distance(newnode.id, hash_key(k)) >
-          distance(successor.id, hash_key(k))) :
+      if (newnode.distance(newnode.id, newnode.hash_key(k)) >
+          newnode.distance(successor.id, newnode.hash_key(k))) :
         newnode[k] = v
     predecessor.fingers[0] = newnode
     successor.predecessor = newnode

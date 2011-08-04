@@ -6,10 +6,10 @@ import dyschord
 
 
 # Simple DistributedHash builder for testing
-def construct_dh(size) :
+def construct_dh(size, Node=dyschord.Node) :
   nodes = {}
   while len(nodes) != size :
-    new_node = dyschord.Node()
+    new_node = Node()
     nodes[new_node.id] = new_node
   rslt = dyschord.DistributedHash()
   for n in nodes.itervalues() :
@@ -30,19 +30,18 @@ def fill_with_words(dh, n) :
       break
   return i
 
-# Really this can be used for anything, but it's such a naive
-# patching, for anything more complicated, I'd rather use a library
-# developed by someone else.
-def patch_dyschord(settings=dict(), module=dyschord) :
-  orig_settings = {}
-  for k, v in settings.iteritems() :
-    orig_settings[k] = getattr(module, k)
-    setattr(module, k, v)
-  return orig_settings
+# Not needed any more, right now, but will probably be needed soon.
 
-simple_hash = {"hash_bits": 4,
-               "hash_key" : (lambda k : k % 2**4),
-               "finger_table_size": 1}
+# # Really this can be used for anything, but it's such a naive
+# # patching, for anything more complicated, I'd rather use a library
+# # developed by someone else.
+# def patch_dyschord(settings=dict(), module=dyschord) :
+#   orig_settings = {}
+#   for k, v in settings.iteritems() :
+#     orig_settings[k] = getattr(module, k)
+#     setattr(module, k, v)
+#   return orig_settings
+
 
 
 def dump_distributed_hash(dh) :
@@ -52,8 +51,8 @@ def dump_distributed_hash(dh) :
 
 class ConstructionTest(unittest.TestCase) :
   def setUp(self) :
-    self._orig_settings = patch_dyschord(settings=simple_hash)
-    self.nodes = [dyschord.Node(i) for i in (0, 3, 8)]
+    self.metric = dyschord.TrivialMetric(4)
+    self.nodes = [dyschord.Node(i, metric=self.metric) for i in (0, 3, 8)]
 
   def testJoin(self) :
     dh = dyschord.DistributedHash()
@@ -65,19 +64,13 @@ class ConstructionTest(unittest.TestCase) :
       #        for n in self.nodes]
       self.assertEquals(dh.num_nodes(), i+1)
 
-  def tearDown(self) :
-    patch_dyschord(self._orig_settings)
-
 
 class SimpleTest(unittest.TestCase) :
   def setUp(self) :
-    self._orig_settings = patch_dyschord(simple_hash)
-    self.distributed_hash = construct_dh(5)
+    self.metric = dyschord.TrivialMetric(4)
+    self.distributed_hash = construct_dh(
+      5, lambda : dyschord.Node(metric=self.metric))
 
-  def tearDown(self) :
-    self.distributed_hash = None
-    patch_dyschord(self._orig_settings)
-      
   def testOneValue(self) :
     self.assertEquals(len(self.distributed_hash), 0)
     self.distributed_hash.store(0, "zero")
@@ -97,7 +90,7 @@ class SimpleTest(unittest.TestCase) :
 
   def testJoinPreExisting(self) :
     distributed_hash = dyschord.DistributedHash()
-    n = dyschord.Node(1)
+    n = dyschord.Node(1, metric=self.metric)
     distributed_hash.join(n)
     self.assertRaises(Exception, distributed_hash.join, n)
     
