@@ -237,7 +237,7 @@ class Node(MutableMapping) :
   #   def closest_preceding_finger(self, key_hash) :
 
 
-def iternodes(start) :
+def walk(start) :
   seen = set()
   node = start
   while True :
@@ -280,7 +280,7 @@ class DistributedHash(object) :
   def _iternodes(self, start=None) :
     if self.__start is None :
       return []
-    return iternodes(self.__start)
+    return walk(self.__start)
 
   def iterkeys(self) :
     for node in self._iternodes() :
@@ -327,7 +327,7 @@ class DistributedHash(object) :
     # (b) for each node, only fingers that are from 1 to (new_node._id
     # - node._id) need to change.
     newnode.update_fingers()
-    for node in iternodes(newnode.next) :
+    for node in walk(newnode.next) :
       # find_predecessor(
       # newnode, newnode.id - max(newnode.finger_steps))) :
       if node.id == newnode.id :
