@@ -205,15 +205,18 @@ class Node(MutableMapping) :
     # Faster updating when new node is added.
     # print "Updating fingers on node", self.id, "for newnode", newnode.id
     for i, step in enumerate(self.finger_steps) :
-      if (self.fingers[i].id != self.id
-          and (self.distance(self.id, self.fingers[i].id)
+      old_finger = self.fingers[i]
+      if old_finger.id == newnode.id :
+        # Already registered.  Probably set to next during joining
+        continue
+      if (old_finger.id != self.id
+          and (self.distance(self.id, old_finger.id)
                < self.distance(self.id, newnode.id))) :
         continue
       # print "Updating finger", i, "pointing", step, "away"
-      old = self.fingers[i]
-      self.fingers[i] = find_node(old, ((self.id+step)
-                                        % 2**self.__metric.hash_bits))
-      if self.fingers[i].id == old.id :
+      self.fingers[i] = find_node(old_finger, ((self.id+step)
+                                               % 2**self.__metric.hash_bits))
+      if self.fingers[i].id == old_finger.id :
         break
 
   # def _find_predecessor_or_closest(self, key_hash) :
@@ -307,7 +310,6 @@ class DistributedHash(object) :
     # Start with all fingers pointing to the predecessor, then update
     newnode.predecessor = predecessor
     newnode.fingers = list(predecessor.fingers)
-    newnode.update_fingers()
 
     successor = predecessor.next
     for k, v in successor.iteritems() :
@@ -324,6 +326,7 @@ class DistributedHash(object) :
     #
     # (b) for each node, only fingers that are from 1 to (new_node._id
     # - node._id) need to change.
+    newnode.update_fingers()
     for node in iternodes(newnode.next) :
       # find_predecessor(
       # newnode, newnode.id - max(newnode.finger_steps))) :
