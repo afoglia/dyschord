@@ -155,7 +155,9 @@ class Node(MutableMapping) :
   @property
   def name(self) :
     return str(self.__uuid)
-   
+
+  def __str__(self) :
+    return "Node(id=%d)" % self.id
   def __getitem__(self, key) :
     return self.data[key]
 
