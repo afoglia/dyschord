@@ -44,13 +44,12 @@ class TrivialMetric(Md5Metric) :
 # Keep the finger_table_size small for testing, so I can get my head around it
 finger_table_size = 128
 
-# Surprisingly, chopping to integers after the exponentiation returns
-# better step sizes, although they are no longer powers of two.  (Need
-# to be careful when finger_table_size > hash_bits, there are
-# duplicate step sizes of 0.)
-def computer_finger_steps(hash_bits, finger_table_size) :
-  return sorted(set(int(2**((hash_bits-1)*x*1.0/(finger_table_size)))
-                    for x in xrange(finger_table_size+1)))[:-1]
+
+def compute_finger_steps(hash_bits, finger_table_size) :
+  finger_table_size = min(finger_table_size, hash_bits)
+  return sorted(2**(int((hash_bits)*i*1.0/finger_table_size))
+                for i in xrange(finger_table_size))
+
 
 
 # # Node finding function taken from <http://www.linuxjournal.com/article/6797>
@@ -131,8 +130,10 @@ class Node(MutableMapping) :
     self.__id = self.__uuid.int % 2**self.__metric.hash_bits
     self.data = {}
     self.predecessor = None
-    self.finger_steps = computer_finger_steps(
-      self.__metric.hash_bits, finger_table_size)
+    if not nfingers :
+      nfingers = finger_table_size
+    self.finger_steps = compute_finger_steps(
+      self.__metric.hash_bits, nfingers)
     self.fingers = [None for f in self.finger_steps]
 
   @property
