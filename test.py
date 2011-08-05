@@ -13,6 +13,7 @@ def construct_dh(size, Node=dyschord.Node) :
     nodes[new_node.id] = new_node
   rslt = dyschord.DistributedHash()
   for n in nodes.itervalues() :
+    # print "Adding node", n.id
     rslt.join(n)
   return dyschord.DistributedHash(n)
 
@@ -203,7 +204,6 @@ class WordsTest(unittest.TestCase) :
       if new_node.id not in existing_nodes :
         break
     self.distributed_hash.join(new_node)
-    self.assertEquals(len(self.distributed_hash), size)
     self.assertEquals(self.distributed_hash.num_nodes(), old_num_nodes+1)
     self.assertEquals(len(self.distributed_hash), old_len)
     for k, v in as_dict.iteritems() :

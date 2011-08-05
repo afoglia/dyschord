@@ -52,50 +52,56 @@ def compute_finger_steps(hash_bits, finger_table_size) :
 
 
 
-# # Node finding function taken from <http://www.linuxjournal.com/article/6797>
-# def find_predecessor(start, key_hash) :
-#   current = start
-#   distance = current.distance
-#   next = next.id
-#   while :
-#   next = current._find_predecessor_or_closest(key_hash)
-#   while True :
-#     current_distance = distance(current.id, key_hash)
-#     # Can speed up by not checking all fingers, and use the finger
-#     # step size to narrow down which finger it is.
-#     if current_distance == 0 :
-#       return current
-#     idx = bisect.bisect_right(current.finger_steps, current_distance)
-#     idx -= 1
-#     if idx < 0 :
-#       return current
-#     finger = current.fingers[idx]
-#     while idx >= 0 :
-#       # print "idx =", idx
-#       while finger is None :
-#         # Possible node corruption
-#         idx -= 1
-#         if idx < 0 :
-#           # We've gone through all the fingers before where we should
-#           # go, and they're not pointing to anything.  Possibly can
-#           # recover if some of the longer fingers are not None, but
-#           # won't worry about that now.
-#           raise Exception("Node graph corruption: Dangling end")
-#         finger = current.fingers[idx]
-#       if current_distance > distance(finger.id, key_hash) :
-#         current = finger
-#         break
-#       else :
-#           idx -= 1
-#           finger = current.fingers[idx]
-#     else :
-#       return current
-#   return current
+# Node finding function taken from <http://www.linuxjournal.com/article/6797>
+def find_predecessor(start, key_hash) :
+  current = start
+  distance = current.distance
+  # next = next.id
+  # while :
+  # next = current._find_predecessor_or_closest(key_hash)
+  while True :
+    # print "Looking for predecessor to:", key_hash
+    # print "Starting at:", current.id
+    distance_to_current = distance(key_hash, current.id)
+    # print "Current distance:", distance_to_current
+    # Can speed up by not checking all fingers, and use the finger
+    # step size to narrow down which finger it is.
+    if distance_to_current == 0 :
+      return current.predecessor
+
+    distance_from_current = distance(current.id, key_hash)
+    # idx = bisect.bisect_right(current.finger_steps, distance_from_current)
+    # idx -= 1
+    # if idx < 0 :
+    #   return current
+    # finger = current.fingers[idx]
+    # if finger.id == key_hash :
+    #   return finger.predecessor
+    # if (distance_to_current < distance(key_hash, finger.id)) :
+    #   # print "Advancing to finger", finger.id
+    #   current = finger
+    #   continue
+    # break
+  
+    for finger_step, finger in \
+          reversed(zip(current.finger_steps, current.fingers)) :
+      # print "Finger distance:", distance(key_hash, finger.id)
+      if finger.id == key_hash :
+        return finger.predecessor
+      if finger_step >= distance_from_current :
+        continue
+      if (distance_to_current < distance(key_hash, finger.id)) :
+        # print "Advancing to finger", finger.id
+        current = finger
+        break
+    else :
+      break
+  return current
 
 
 # Non-finger-based lookup logic, so I can replace the new logic with
 # the old for timing purposes.
-def find_predecessor(start, key_hash) :
+def find_predecessor_without_fingers(start, key_hash) :
   current = start
   distance = current.distance
   while True :
@@ -197,10 +203,13 @@ class Node(MutableMapping) :
 
   def update_fingers_on_insert(self, newnode) :
     # Faster updating when new node is added.
+    # print "Updating fingers on node", self.id, "for newnode", newnode.id
     for i, step in enumerate(self.finger_steps) :
-      if (self.distance(self.id, self.fingers[i].id)
-          < self.distance(self.id, newnode.id)) :
+      if (self.fingers[i].id != self.id
+          and (self.distance(self.id, self.fingers[i].id)
+               < self.distance(self.id, newnode.id))) :
         continue
+      # print "Updating finger", i, "pointing", step, "away"
       old = self.fingers[i]
       self.fingers[i] = find_node(old, ((self.id+step)
                                         % 2**self.__metric.hash_bits))
@@ -310,15 +319,17 @@ class DistributedHash(object) :
 
     # Update fingers of other nodes.
     #
-    # (a) only nodes from new_node._id - max(finger_step) to predecessor
+    # (a) only nodes from new_node.id - max(finger_step) to predecessor
     # can possible have changes
     #
     # (b) for each node, only fingers that are from 1 to (new_node._id
     # - node._id) need to change.
-    for node in iternodes(find_predecessor(
-      newnode, newnode.id - max(newnode.finger_steps))) :
+    for node in iternodes(newnode.next) :
+      # find_predecessor(
+      # newnode, newnode.id - max(newnode.finger_steps))) :
       if node.id == newnode.id :
         break
+      # print "Updating fingers for", node.id
       node.update_fingers_on_insert(newnode)
 
     for k in newnode :
@@ -333,6 +344,7 @@ class DistributedHash(object) :
     # passing in another instance with the same id.  Might be useful
     # for testing.
     predecessor = find_predecessor(self.__start, node.id)
+    # print "Leaving node %d has predecessor %d" % (node.id, predecessor.id)
     if predecessor.next.id != node.id :
       # No joined node with this id.  Maybe log the missing node, but
       # work is done
