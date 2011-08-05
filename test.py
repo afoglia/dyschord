@@ -46,30 +46,119 @@ def fill_with_words(dh, n) :
 
 def dump_distributed_hash(dh) :
   for node in dh._iternodes() :
-    print node.id, node.next.id, len(node)
+    print "id=%s, next.id=%s, len=%s" % (node.id, node.next.id, len(node))
 
 
-class ConstructionTest(unittest.TestCase) :
+class JoinTest(unittest.TestCase) :
   def setUp(self) :
     self.metric = dyschord.TrivialMetric(4)
-    self.nodes = [dyschord.Node(i, metric=self.metric) for i in (0, 3, 8)]
+    self.Node = lambda i=None : dyschord.Node(i, nfingers=1, metric=self.metric)
+    self.nodes = dict((i, self.Node(i)) for i in (0, 3, 8))
 
-  def testJoin(self) :
+  def testJoinEmpty(self) :
     dh = dyschord.DistributedHash()
     self.assertEquals(dh.num_nodes(), 0)
-    print
-    for i, node in enumerate(self.nodes) :
+    for i, node in enumerate(self.nodes.itervalues()) :
       dh.join(node)
-      # print [(n.id, n.next.id if n.next is not None else None)
-      #        for n in self.nodes]
       self.assertEquals(dh.num_nodes(), i+1)
+
+  def testJoinWithData(self) :
+    dh = dyschord.DistributedHash()
+    for node in self.nodes.itervalues() :
+      dh.join(node)
+    dh.store(1, "one")
+    for k, node in self.nodes.iteritems() :
+      self.assertEquals(len(node), 0 if k!=3 else 1)
+    self.nodes[5] = self.Node(5)
+    dh.join(self.nodes[5])
+    for k, node in self.nodes.iteritems() :
+      self.assertEquals(len(node), 0 if k!=3 else 1)
+
+  def testJoinWithDataMove(self) :
+    dh = dyschord.DistributedHash()
+    for node in self.nodes.itervalues() :
+      dh.join(node)
+    dh.store(1, "one")
+    for k, node in self.nodes.iteritems() :
+      self.assertEquals(len(node), 0 if k!=3 else 1)
+    self.nodes[2] = self.Node(2)
+    dh.join(self.nodes[2])
+    for k, node in self.nodes.iteritems() :
+      self.assertEquals(len(node), 0 if k!=2 else 1)
+
+  def testJoinWithDataMoveMatchNewId(self) :
+    dh = dyschord.DistributedHash()
+    for node in self.nodes.itervalues() :
+      dh.join(node)
+    dh.store(1, "one")
+    for k, node in self.nodes.iteritems() :
+      self.assertEquals(len(node), 0 if k!=3 else 1)
+    self.nodes[1] = self.Node(1)
+    dh.join(self.nodes[1])
+    for k, node in self.nodes.iteritems() :
+      self.assertEquals(len(node), 0 if k!=1 else 1)
+
+
+class LeaveTest(unittest.TestCase) :
+  def setUp(self) :
+    self.metric = dyschord.TrivialMetric(4)
+    self.Node = lambda i=None : dyschord.Node(i, nfingers=1, metric=self.metric)
+    self.nodes = dict((i, self.Node(i)) for i in (0, 3, 8))
+    self.distributed_hash = dyschord.DistributedHash()
+    for node in self.nodes.itervalues() :
+      self.distributed_hash.join(node)
+
+  def testLeaveEmpty(self) :
+    dh = self.distributed_hash
+    self.assertEquals(dh.num_nodes(), len(self.nodes))
+    dh.leave(self.nodes[0])
+    self.assertEquals(dh.num_nodes(), len(self.nodes)-1)
+
+  def testLeaveWithData(self) :
+    dh = self.distributed_hash
+    dh.store(1, "one")
+    self.assertEqual(len(dh), 1)
+    for k, node in self.nodes.iteritems() :
+      self.assertEquals(len(node), 0 if k!=3 else 1)
+    dh.leave(self.nodes[8])
+    self.assertEquals(len(dh), 1)
+    for k, node in self.nodes.iteritems() :
+      if k == 8 :
+        continue
+      self.assertEquals(len(node), 0 if k!=3 else 1)
+
+  def testLeaveWithDataMove(self) :
+    dh = self.distributed_hash
+    dh.store(1, "one")
+    self.assertEquals(len(dh), 1)
+    for k, node in self.nodes.iteritems() :
+      self.assertEquals(len(node), 0 if k!=3 else 1)
+    dh.leave(self.nodes[3])
+    self.assertEquals(len(dh), 1)
+    for k, node in self.nodes.iteritems() :
+      if k == 3 :
+        continue
+      self.assertEquals(len(node), 0 if k!=8 else 1)
+
+  def testLeaveWithDataMoveMatchOldId(self) :
+    dh = self.distributed_hash
+    dh.store(0, "zero")
+    self.assertEquals(len(dh), 1)
+    for k, node in self.nodes.iteritems() :
+      self.assertEquals(len(node), 0 if k!=0 else 1)
+    dh.leave(self.nodes[0])
+    self.assertEquals(len(dh), 1)
+    for k, node in self.nodes.iteritems() :
+      if k == 0 :
+        continue
+      self.assertEquals(len(node), 0 if k!=3 else 1)
 
 
 class SimpleTest(unittest.TestCase) :
   def setUp(self) :
     self.metric = dyschord.TrivialMetric(4)
-    self.distributed_hash = construct_dh(
-      5, lambda : dyschord.Node(metric=self.metric))
+    self.Node = lambda i=None : dyschord.Node(i, nfingers=1, metric=self.metric)
+    self.distributed_hash = construct_dh(5, self.Node)
 
   def testOneValue(self) :
     self.assertEquals(len(self.distributed_hash), 0)
@@ -90,11 +179,10 @@ class SimpleTest(unittest.TestCase) :
 
   def testJoinPreExisting(self) :
     distributed_hash = dyschord.DistributedHash()
-    n = dyschord.Node(1, metric=self.metric)
+    n = self.Node(1)
     distributed_hash.join(n)
     self.assertRaises(Exception, distributed_hash.join, n)
     
-
 
 class WordsTest(unittest.TestCase) :
   def setUp(self) :
