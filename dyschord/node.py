@@ -10,7 +10,7 @@ class Md5Metric(object) :
   # hashing, and the latter for the node ids and the sizes already work.
 
   def __init__(self, hash_bits=128) :
-    self.hash_bits = 128
+    self.hash_bits = hash_bits
 
   # I don't want to shadow a builtin, so I'll give it this clumsy name.
   def hash_key(self, key) :
