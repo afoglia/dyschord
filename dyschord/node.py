@@ -215,6 +215,20 @@ def walk(start) :
       break
 
 
+# Update fingers of other nodes.
+#
+# (a) only nodes from new_node.id - max(finger_step) to predecessor
+# can possible have changes
+#
+# (b) for each node, only fingers that are from 1 to (new_node._id
+# - node._id) need to change.
+def announce(new_node) :
+  for node in walk(new_node.next) :
+    if node.id == new_node.id :
+      break
+    node.update_fingers_on_insert(new_node)
+
+
 class DistributedHash(object) :
   def __init__(self, start=None) :
     # Start points to the beginning of the list
@@ -284,21 +298,8 @@ class DistributedHash(object) :
     predecessor.fingers[0] = newnode
     successor.predecessor = newnode
 
-    # Update fingers of other nodes.
-    #
-    # (a) only nodes from new_node.id - max(finger_step) to predecessor
-    # can possible have changes
-    #
-    # (b) for each node, only fingers that are from 1 to (new_node._id
-    # - node._id) need to change.
     newnode.update_fingers()
-    for node in walk(newnode.next) :
-      # find_predecessor(
-      # newnode, newnode.id - max(newnode.finger_steps))) :
-      if node.id == newnode.id :
-        break
-      # print "Updating fingers for", node.id
-      node.update_fingers_on_insert(newnode)
+    announce(newnode)
 
     for k in newnode :
       del successor[k]
