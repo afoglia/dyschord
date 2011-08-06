@@ -126,12 +126,12 @@ class Node(MutableMapping) :
     self.__metric = metric if metric else Md5Metric()
     self.__id = self.__uuid.int % 2**self.__metric.hash_bits
     self.data = {}
-    self.predecessor = None
+    self.predecessor = self
     if not nfingers :
       nfingers = finger_table_size
     self.finger_steps = compute_finger_steps(
       self.__metric.hash_bits, nfingers)
-    self.fingers = [None for f in self.finger_steps]
+    self.fingers = [self for f in self.finger_steps]
     self.initialized = False
 
   @property
