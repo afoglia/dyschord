@@ -55,47 +55,12 @@ def compute_finger_steps(hash_bits, finger_table_size) :
 # Node finding function taken from <http://www.linuxjournal.com/article/6797>
 def find_predecessor(start, key_hash) :
   current = start
-  distance = current.distance
-  # next = next.id
-  # while :
-  # next = current._find_predecessor_or_closest(key_hash)
   while True :
-    # print "Looking for predecessor to:", key_hash
-    # print "Starting at:", current.id
-    distance_to_current = distance(key_hash, current.id)
-    # print "Current distance:", distance_to_current
-    # Can speed up by not checking all fingers, and use the finger
-    # step size to narrow down which finger it is.
-    if distance_to_current == 0 :
-      return current.predecessor
-
-    distance_from_current = distance(current.id, key_hash)
-    # idx = bisect.bisect_right(current.finger_steps, distance_from_current)
-    # idx -= 1
-    # if idx < 0 :
-    #   return current
-    # finger = current.fingers[idx]
-    # if finger.id == key_hash :
-    #   return finger.predecessor
-    # if (distance_to_current < distance(key_hash, finger.id)) :
-    #   # print "Advancing to finger", finger.id
-    #   current = finger
-    #   continue
-    # break
-  
-    for finger_step, finger in \
-          reversed(zip(current.finger_steps, current.fingers)) :
-      # print "Finger distance:", distance(key_hash, finger.id)
-      if finger.id == key_hash :
-        return finger.predecessor
-      if finger_step >= distance_from_current :
-        continue
-      if (distance_to_current < distance(key_hash, finger.id)) :
-        # print "Advancing to finger", finger.id
-        current = finger
-        break
-    else :
+    next = current.closest_preceding_node(key_hash)
+    if next.id == current.id :
       break
+    else :
+      current = next
   return current
 
 
@@ -189,11 +154,26 @@ class Node(MutableMapping) :
   #   else :
   #     return self.closest_preceding_node(key_hash).find_successor(key_hash)
 
-  # def closest_preceding_node(self, key_hash) :
-  #   for finger in reversed(self.fingers) :
-  #     if distance(finger.id, key_hash) > distance(self.id, key_hash) :
-  #       return finger
-  #   return self
+  def closest_preceding_node(self, key_hash) :
+    # If I were sure the metric was going to be the "clockwise"
+    # distance, then I could use distance_to_node =
+    # -distance_from_node % 2**hash_bits, but I want to keep the
+    # flexibility and clarity in case I try a different topology.
+    distance_from_node = self.distance(self.id, key_hash)
+    if distance_from_node == 0 :
+      return self.predecessor
+    distance_to_node = self.distance(key_hash, self.id)
+    for finger_step, finger in \
+          reversed(zip(self.finger_steps, self.fingers)) :
+      # print "Finger distance:", distance(key_hash, finger.id)
+      if finger.id == key_hash :
+        return finger.predecessor
+      if finger_step >= distance_from_node :
+        continue
+      if (distance_to_node < self.distance(key_hash, finger.id)) :
+        # print "Advancing to finger", finger.id
+        return finger
+    return self
 
   def update_fingers(self) :
     for i, step in enumerate(self.finger_steps) :
@@ -219,22 +199,7 @@ class Node(MutableMapping) :
       if self.fingers[i].id == old_finger.id :
         break
 
-  # def _find_predecessor_or_closest(self, key_hash) :
-  #   current_distance = self.distance(self.id, key_hash)
-  #   if (self.distance(self.predecessor.id, key_hash)
-  #       < current_distance) :
-  #     return self.predecessor
-  #   else :
-  #     prev_finger = current
-  #     for finger in self.fingers :
-  #       if (self.distance(self.id, key_hash)
-  #           < self.distance(finger.id, key_hash)) :
-  #         return prev_finger
-  #     else :
-  #       # Farther than furthest finger
-  #       return finger
 
-  #   def closest_preceding_finger(self, key_hash) :
 
 
 def walk(start) :
