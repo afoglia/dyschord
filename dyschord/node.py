@@ -1,6 +1,7 @@
 # Heavily based on example at <http://www.linuxjournal.com/article/6797>
 import hashlib
 import uuid
+import functools
 import bisect
 from collections import MutableMapping
 
@@ -82,10 +83,35 @@ def find_node(start, key_hash) :
   return rslt.next
 
 
+class Uninitialized(Exception) :
+  pass
+
+
+# Helper function to deactivate methods while the node is starting up.
+# The other options are:
+#
+# 1. Instead of wrapping the methods I could dynamically add them, but
+# then I they won't have been parsed by the XML-RPC server (assuming
+# it does the scan of methods only once).  Plus, that's more
+# complicated.  But it would have the benefit of having no cost once
+# the node is initializaed.
+#
+# 2. Use a lock.  But I don't want to block, I want to throw an exception.  And I don't want have to pay the overhead of the extra lock.
+def initialization_check(wrappee) :
+  @functools.wraps(wrappee)
+  def wrapped(*args, **kwargs) :
+    self=args[0]
+    if not args[0].initialized :
+      raise Uninitialized("Node is still starting up")
+    return wrappee(*args, **kwargs)
+  return wrapped
+
+
 # I could probably derive from a dictionary, and just add extra
 # properties and methods, but I might need to change too many
 # functions, especially when I want to persist the data to disk.
 class Node(MutableMapping) :
+
   def __init__(self, id=None, nfingers=None, metric=None) :
     # nfingers   None means default
 
@@ -106,6 +132,7 @@ class Node(MutableMapping) :
     self.finger_steps = compute_finger_steps(
       self.__metric.hash_bits, nfingers)
     self.fingers = [None for f in self.finger_steps]
+    self.initialized = False
 
   @property
   def distance(self) :
@@ -129,22 +156,29 @@ class Node(MutableMapping) :
 
   def __str__(self) :
     return "Node(id=%d)" % self.id
+
+  @initialization_check
   def __getitem__(self, key) :
     return self.data[key]
 
+  @initialization_check
   def __setitem__(self, key, value) :
     self.data[key] = value
 
+  @initialization_check
   def __delitem__(self, key) :
     del self.data[key]
 
+  @initialization_check
   def iterkeys(self) :
     return self.data.iterkeys()
   __iter__ = iterkeys
 
+  @initialization_check
   def __contains__(self, key) :
     return key in self.data
 
+  @initialization_check
   def __len__(self) :
     return len(self.data)
 
@@ -154,6 +188,7 @@ class Node(MutableMapping) :
   #   else :
   #     return self.closest_preceding_node(key_hash).find_successor(key_hash)
 
+  @initialization_check
   def closest_preceding_node(self, key_hash) :
     # If I were sure the metric was going to be the "clockwise"
     # distance, then I could use distance_to_node =
@@ -199,6 +234,7 @@ class Node(MutableMapping) :
       if self.fingers[i].id == old_finger.id :
         break
 
+  @initialization_check
   def prepend_node(self, newnode) :
     # By making the method a "prepend node" called on the new
     # successor, I can reduce the traffic by combining the data and
@@ -243,6 +279,7 @@ class Node(MutableMapping) :
     self.predecessor = predecessor
     self.fingers = fingers
     self.data.update(data)
+    self.initialized = True
 
 
 
@@ -327,6 +364,7 @@ class DistributedHash(object) :
     if self.__start is None :
       self.__start = newnode
       self.__start.fingers = [newnode]*len(self.__start.fingers)
+      self.__start.initialized = True
       return
 
     predecessor = find_predecessor(self.__start, newnode.id)

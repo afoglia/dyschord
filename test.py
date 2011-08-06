@@ -49,6 +49,26 @@ def dump_distributed_hash(dh) :
     print "id=%s, next.id=%s, len=%s" % (node.id, node.next.id, len(node))
 
 
+class InitializationLockTest(unittest.TestCase) :
+  def setUp(self) :
+    self.metric = dyschord.TrivialMetric(4)
+    self.Node = (lambda id=None :
+                   dyschord.Node(id, nfingers=1, metric=self.metric))
+    self.nodes = dict((i, self.Node(i)) for i in (0, 3, 8))
+
+  def testUninitialized(self) :
+    node = self.nodes.values()[0]
+    # print "Initialization state:", node.initialized
+    # print len(node)
+    # print node.closest_preceding_node(10)
+    self.assertRaises(dyschord.Uninitialized, len, node)
+
+  def testInitialized(self) :
+    node = self.nodes.values()[0]
+    dh = dyschord.DistributedHash(node)
+    self.assertEquals(len(node), 0)
+
+
 class JoinTest(unittest.TestCase) :
   def setUp(self) :
     self.metric = dyschord.TrivialMetric(4)
