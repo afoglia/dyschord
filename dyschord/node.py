@@ -286,13 +286,13 @@ class DistributedHash(object) :
       return
 
     predecessor = find_predecessor(self.__start, newnode.id)
-    if predecessor.id == newnode.id :
+    successor = predecessor.next
+    if successor.id == newnode.id :
       raise Exception("Node already exists with same id")
     # Start with all fingers pointing to the predecessor, then update
     newnode.predecessor = predecessor
     newnode.fingers = list(predecessor.fingers)
 
-    successor = predecessor.next
     for k, v in successor.iteritems() :
       if (newnode.distance(newnode.hash_key(k), newnode.id)
           < newnode.distance(newnode.hash_key(k), successor.id)) :

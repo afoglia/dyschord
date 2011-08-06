@@ -52,7 +52,8 @@ def dump_distributed_hash(dh) :
 class JoinTest(unittest.TestCase) :
   def setUp(self) :
     self.metric = dyschord.TrivialMetric(4)
-    self.Node = lambda i=None : dyschord.Node(i, nfingers=1, metric=self.metric)
+    self.Node = (lambda id=None :
+                   dyschord.Node(id, nfingers=1, metric=self.metric))
     self.nodes = dict((i, self.Node(i)) for i in (0, 3, 8))
 
   def testJoinEmpty(self) :
@@ -61,6 +62,13 @@ class JoinTest(unittest.TestCase) :
     for i, node in enumerate(self.nodes.itervalues()) :
       dh.join(node)
       self.assertEquals(dh.num_nodes(), i+1)
+
+  def testJoinDuplicateId(self) :
+    dh = dyschord.DistributedHash()
+    for i, node in enumerate(self.nodes.itervalues()) :
+      dh.join(node)
+    new_node = self.Node(id=self.nodes.values()[0].id)
+    self.assertRaises(Exception, dh.join, new_node)
 
   def testJoinWithData(self) :
     dh = dyschord.DistributedHash()
