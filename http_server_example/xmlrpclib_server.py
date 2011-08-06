@@ -10,7 +10,10 @@ from SocketServer import ThreadingMixIn
 from xmlrpclib import Binary
 import datetime
 
-from readwritelock import RWLock
+import threading
+
+from dyschord.readwritelock import RWLock
+
 
 # Threaded XML RPC Server
 class ThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer) :
@@ -71,13 +74,32 @@ class ExampleService:
     response = Binary(data)
     return response
 
-server.register_instance(ExampleService())
+example_service = ExampleService()
+server.register_instance(example_service)
 
-try :
-  print "Use Control-C to exit"
-  server.serve_forever()
-except KeyboardInterrupt :
-  print "Exiting"
+def start_in_thread(server) :
+  server_main_thread = threading.Thread(target=server.serve_forever)
+  server_main_thread.start()
+  return server_main_thread
+
+if __name__ == "__main__" :
+  server_main_thread = None
+  try :
+    print "Use Control-C to exit"
+    server_main_thread = start_in_thread(server)
+    print "In other thread now..."
+    while True :
+      # print ">>>",
+      try :
+        print input(">>> ")
+      except Exception, e :
+        print e
+      # pass
+  except KeyboardInterrupt :
+    server.shutdown()
+    if server_main_thread is not None :
+      server_main_thread.join()
+    print "Exiting"
 
 
   
