@@ -30,10 +30,10 @@ class DyschordService(node.DistributedHash) :
 
   def lookup(self, key) :
     key_hash = self.node.hash_key(key)
-    if (distance(key_hash, self.node.id)
-        < distance(key_hash, self.node.predecessor.id)) :
+    if (self.node.distance(key_hash, self.node.id)
+        <= self.node.distance(key_hash, self.node.predecessor.id)) :
       return self.node[key]
-    target_node = find_node(self.node, key_hash)
+    target_node = node.find_node(self.node, key_hash)
     return target_node.lookup(key)
 
   def store(self, key, value) :
