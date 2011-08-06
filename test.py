@@ -13,9 +13,8 @@ def construct_dh(size, Node=dyschord.Node) :
     nodes[new_node.id] = new_node
   rslt = dyschord.DistributedHash()
   for n in nodes.itervalues() :
-    # print "Adding node", n.id
     rslt.join(n)
-  return dyschord.DistributedHash(n)
+  return rslt
 
 # Again a function for testing, we'll build a list using the first n words from
 # the system dictionary
@@ -220,9 +219,11 @@ class WordsTest(unittest.TestCase) :
     size = 10
     fill_with_words(self.distributed_hash, size)
     old_num_nodes = self.distributed_hash.num_nodes()
+    nodes = list(self.distributed_hash._iternodes())
     as_dict = dict((k, self.distributed_hash.lookup(k))
                    for k in self.distributed_hash.iterkeys())
-    parting = list(self.distributed_hash._iternodes())[(1+old_num_nodes)/2]
+    nodes = list(self.distributed_hash._iternodes())
+    parting = nodes[(1+old_num_nodes)/2]
     self.distributed_hash.leave(parting)
     self.assertEqual(len(self.distributed_hash), size)
     self.assertEquals(self.distributed_hash.num_nodes(), old_num_nodes-1)
