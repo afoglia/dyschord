@@ -199,6 +199,50 @@ class Node(MutableMapping) :
       if self.fingers[i].id == old_finger.id :
         break
 
+  def prepend_node(self, newnode) :
+    # By making the method a "prepend node" called on the new
+    # successor, I can reduce the traffic by combining the data and
+    # fingers for the new node.  More importantly, I can lock the data
+    # so any incoming stores for data that would no longer be in the
+    # successor's control is blocked.
+
+    # Ensure the node is correct
+    successor = self
+    predecessor = self.predecessor
+    if predecessor is None :
+      # Must be first joining...
+      predecessor = self
+    if self.id == newnode.id :
+      raise Exception("Preexisting node with id")
+    distance_to_newnode = self.distance(self.id, newnode.id)
+    distance_to_predecessor = self.distance(self.id, predecessor.id)
+    if distance_to_newnode < distance_to_predecessor :
+      raise Exception("Nodes must be attached to their successor")
+    if distance_to_newnode == distance_to_predecessor :
+      # Should ping the successor to make sure it's still up.
+      raise Exception("Preexisting node with id")
+
+    # Setup new node
+    delegated_data = {}
+    for k, v in successor.iteritems() :
+      if (newnode.distance(newnode.hash_key(k), newnode.id)
+          < newnode.distance(newnode.hash_key(k), successor.id)) :
+        delegated_data[k] = v
+    newnode.setup(predecessor, list(predecessor.fingers), delegated_data)
+
+    # Establish new fingers to bring the new node into chain
+    predecessor.fingers[0] = newnode
+    successor.predecessor = newnode
+
+    for k in delegated_data :
+      # Should move to a backup, should I have time to establish that.
+      del self.data[k]
+
+
+  def setup(self, predecessor, fingers, data) :
+    self.predecessor = predecessor
+    self.fingers = fingers
+    self.data.update(data)
 
 
 
@@ -289,22 +333,12 @@ class DistributedHash(object) :
     successor = predecessor.next
     if successor.id == newnode.id :
       raise Exception("Node already exists with same id")
-    # Start with all fingers pointing to the predecessor, then update
-    newnode.predecessor = predecessor
-    newnode.fingers = list(predecessor.fingers)
+    successor.prepend_node(newnode)
 
-    for k, v in successor.iteritems() :
-      if (newnode.distance(newnode.hash_key(k), newnode.id)
-          < newnode.distance(newnode.hash_key(k), successor.id)) :
-        newnode[k] = v
-    predecessor.fingers[0] = newnode
-    successor.predecessor = newnode
-
+    # Optimize fingers.  Don't need to lock the nodes while this is
+    # being done.
     newnode.update_fingers()
     announce(newnode)
-
-    for k in newnode :
-      del successor[k]
 
 
   def leave(self, node) :
