@@ -59,9 +59,6 @@ class NodeProxy(object) :
     self.server("close")()
 
     
-  def _iternodes() :
-    pass
-    
 
   def __getattr__(self, attr) :
     # Maybe it's a method on the server...
