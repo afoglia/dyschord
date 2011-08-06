@@ -231,8 +231,10 @@ def announce(new_node) :
 
 class DistributedHash(object) :
   def __init__(self, start=None) :
-    # Start points to the beginning of the list
-    self.__start = start
+    # Start points to the "beginning" of the list
+    self.__start = None
+    if start is not None :
+      self.join(start)
 
   def lookup(self, key) :
     # Can't just use hash because that might differ between Python
