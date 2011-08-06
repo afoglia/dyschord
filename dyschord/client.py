@@ -1,4 +1,5 @@
 import xmlrpclib
+import socket
 
 # Timeout XML-RPC ServerProxy code.
 #
@@ -64,3 +65,30 @@ class NodeProxy(object) :
     # Maybe it's a method on the server...
     return getattr(self.server, attr)
 
+
+# Non-peer client
+class Client(object) :
+  def __init__(self, cloud) :
+    self.cloud = {}
+    for c in cloud :
+      peer = NodeProxy(c)
+      try :
+        peer_id = peer.id
+      except (socket.error, socket.timeout) :
+        # Error connecting to node
+        continue
+      self.cloud[c] = peer
+    if not self.cloud :
+      raise Exception("Unable to connect to any nodes")
+
+  def lookup(self, key) :
+    for peer_id, peer in self.cloud.items() :
+      try :
+        peer.lookup(key)
+      except (socket.error, socket.timeout) :
+        # Error connecting to node
+        del self.cloud[peer_id]
+        continue
+      break
+    if not self.cloud :
+      raise Exception("Unable to connect to any nodes")
