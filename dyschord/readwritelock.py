@@ -11,10 +11,13 @@ class _RWLock(object):
     A Reader-Writer lock.  Allows multiple readers at the same time but
     only one Writer (with recursion).
     Writers have priority over readers.
-    A RWLock is reentrant in a limited fashion:  A thread holding the lock
-    can always get another read lock.  And a thread holding a write lock can get another
-    write lock.  But in general, a thread holding a read lock cannot recursively acquire a write lock.
-    Of course, any recursive lock (rdlock,  or wrlock) must be mathced with an release.
+    
+    A RWLock is reentrant in a limited fashion: A thread holding the
+    lock can always get another read lock.  And a thread holding a
+    write lock can get another write lock.  But in general, a thread
+    holding a read lock cannot recursively acquire a write lock.  Of
+    course, any recursive lock (rdlock, or wrlock) must be mathced
+    with an release.
     """
     def __init__(self):
         self.lock  = Lock()
