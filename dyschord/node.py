@@ -118,7 +118,9 @@ class Node(MutableMapping) :
     # uuid4 is not uniform over 2**128 because hex digit 13 is always
     # 4, and hex digit 17 is either 8, 9, A, or B.  But since these
     # are low digits, it shouldn't matter unless the number of nodes
-    # becomes super-large (~2**32 or so)
+    # becomes super-large (~2**32 or so).  Plus using uuid4 means that
+    # the code will run on both Linux and Windows (otherwise, I'd have
+    # to copy the logic used in uuid.uuid4
     if id is None :
       self.__uuid = uuid.uuid4()
     else :
