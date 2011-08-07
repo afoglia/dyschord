@@ -85,7 +85,7 @@ def start(port, node=None, cloud_addrs=[], forever=True) :
     for cloud_addr in cloud_addrs :
       # Simple check so I can use the same configuration file for
       # multiple test servers.
-      if cloud_addr == "localhost:%d" % port :
+      if cloud_addr == "http://localhost:%d" % port :
         continue
       neighbor = NodeProxy(cloud_addr)
       try :
