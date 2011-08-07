@@ -145,7 +145,21 @@ def main(args=sys.argv) :
   if options.id :
     config["node_id"] = options.id
 
-  node = core.Node(config.get("node_id"))
+  metric_name = config.get("metric")
+  if metric_name is not None :
+    metric_name = metric_name.lower()
+  else :
+    metric_name = "md5"
+  config["metric"] = metric_name
+
+  if metric_name == "md5" :
+    metric = core.Md5Metric()
+  elif metric_name == "trivial" :
+    metric = core.TrivialMetric(4)
+  else :
+    raise Exception('Unrecognized metric "%s"' % metric_name)
+
+  node = core.Node(config.get("node_id"), metric=metric)
 
   start(config.get("port", 10000), node,
         cloud_addrs=config.get("cloud_members", []))
