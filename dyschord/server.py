@@ -17,7 +17,7 @@ from .client import NodeProxy
 class ThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer) :
   """Threading XML-RPC Server"""
 
-# Can derive from the Node class itself
+# Eventually, I hope to derive from the Node class itself
 class DyschordService(core.DistributedHash) :
   def __init__(self, mynode) :
     self.node = mynode
