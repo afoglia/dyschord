@@ -42,29 +42,44 @@ class TimeoutServerProxy(xmlrpclib.ServerProxy):
 #
 # Closing the connection doesn't seem to work though.
 class NodeProxy(object) :
-  def __init__(self, url, id=None, timeout=2, verbose=False) :
+  def __init__(self, url, id=None, timeout=2, verbose=True) :
     # Should parse the URL to makes sure it's http, or if not, add the protocol
+    print "Creating node proxy to url %s with id %s" % (url, id)
+    self.url = url
     self.server = TimeoutServerProxy(url, timeout=timeout, verbose=verbose)
     self.__id = id
 
   @property
   def id(self) :
-    if self.__id is not None :
-      return self.__id
-    else :
+    if self.__id is None :
       ping = self.server.ping()
       self.__id = int(ping["id"])
-    
+    return self.__id
+
+  @property
+  def next(self) :
+    next = self.server.get_next()
+    return NodeProxy(next["url"], id=next.get("id"))
+
   def close(self) :
     self.server("close")()
 
   def find_node(self, key_hash) :
     node_info = self.server.find_node(key_hash)
+    print "Making new proxy for", node_info
     return NodeProxy(node_info["url"], id=node_info.get("id"))
 
   def __getattr__(self, attr) :
     # Maybe it's a method on the server...
     return getattr(self.server, attr)
+
+  def closest_preceding_node(self, key_hash) :
+    node_info = self.server.closest_preceding_node(key_hash)
+    print "Saying result is:", node_info
+    if node_info["url"] == self.url :
+      return self
+    return NodeProxy(node_info["url"], id=node_info.get("id"), verbose=True)
+
 
 
 # Non-peer client

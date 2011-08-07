@@ -22,6 +22,7 @@ class DyschordService(core.DistributedHash) :
   def __init__(self, mynode) :
     self.node = mynode
     core.DistributedHash.__init__(self, self.node)
+    self.url = None
 
   def ping(self) :
     return {"id": str(self.get_id())}
@@ -46,14 +47,22 @@ class DyschordService(core.DistributedHash) :
     target_node = core.find_node(self.node, key_hash)
     target_node.store(key, value)
 
+  def _serialize_node_descr(self, node) :
+    return {"id": node.id, "url": getattr(node, "url", self.url)}
+
   def find_successor(self, key_hash) :
-    return self.node.find_successor(key_hash)
+    rslt = self.node.find_successor(key_hash)
+    return self._serialize_node_descr(rslt)
 
   def closest_preceding_node(self, key_hash) :
     rslt = self.node.closest_preceding_node(key_hash)
-    return {"id":rslt.id, "url":getattr(rslt, "url", None)}
+    return self._serialize_node_descr(rslt)
 
-  
+  def get_next(self) :
+    rslt = self.node.next
+    return self._serialize_node_descr(rslt)
+
+
 def start_in_thread(server) :
   server_main_thread = threading.Thread(target=server.serve_forever)
   server_main_thread.start()
@@ -75,6 +84,7 @@ def start(port, node=None, cloud_addrs=[], forever=True) :
   server.register_multicall_functions()
 
   service = DyschordService(node)
+  service.url = "http://localhost:%d" % port
   server.register_instance(service)
 
   server_thread = None
