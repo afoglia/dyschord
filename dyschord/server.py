@@ -94,7 +94,7 @@ def start(port, node=None, cloud_addrs=[], forever=True) :
         # Node down.  Try next in list
         continue
       try :
-        successor = core.find_node(neighbor, service.id)
+        successor = core.find_node(neighbor, node.id)
       except (socket.timeout, socket.error) :
         # A node in the chain is down, although I will make the
         # individual nodes smart enough to work around that...  The
