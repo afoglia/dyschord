@@ -55,6 +55,7 @@ def compute_finger_steps(hash_bits, finger_table_size) :
 
 # Node finding function taken from <http://www.linuxjournal.com/article/6797>
 def find_predecessor(start, key_hash) :
+  # print "Finding predecessor for %d starting at node %d" % (key_hash, start.id)
   current = start
   while True :
     next = current.closest_preceding_node(key_hash)
@@ -196,10 +197,12 @@ class Node(MutableMapping) :
     # distance, then I could use distance_to_node =
     # -distance_from_node % 2**hash_bits, but I want to keep the
     # flexibility and clarity in case I try a different topology.
-    distance_from_node = self.distance(self.id, key_hash)
+    distance = self.distance
+    distance_from_node = distance(self.id, key_hash)
+    # print "Distance from node:", distance_from_node
     if distance_from_node == 0 :
       return self.predecessor
-    distance_to_node = self.distance(key_hash, self.id)
+    distance_to_node = distance(key_hash, self.id)
     for finger_step, finger in \
           reversed(zip(self.finger_steps, self.fingers)) :
       # print "Finger distance:", distance(key_hash, finger.id)
@@ -207,7 +210,7 @@ class Node(MutableMapping) :
         return finger.predecessor
       if finger_step >= distance_from_node :
         continue
-      if (distance_to_node < self.distance(key_hash, finger.id)) :
+      if (distance_to_node < distance(key_hash, finger.id)) :
         # print "Advancing to finger", finger.id
         return finger
     return self
@@ -260,6 +263,7 @@ class Node(MutableMapping) :
       # Should ping the successor to make sure it's still up.
       raise Exception("Preexisting node with id")
 
+    # print "Preparing data to send:"
     # Setup new node
     delegated_data = {}
     for k, v in successor.iteritems() :

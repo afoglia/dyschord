@@ -51,7 +51,7 @@ class DyschordService(core.DistributedHash) :
     return {"id": node.id, "url": getattr(node, "url", self.url)}
 
   def find_successor(self, key_hash) :
-    rslt = self.node.find_successor(key_hash)
+    rslt = core.find_node(self.node, key_hash)
     return self._serialize_node_descr(rslt)
 
   def closest_preceding_node(self, key_hash) :
@@ -61,6 +61,31 @@ class DyschordService(core.DistributedHash) :
   def get_next(self) :
     rslt = self.node.next
     return self._serialize_node_descr(rslt)
+
+  def get_predecessor(self) :
+    rslt = self.node.predecessor
+    return self._serialize_node_descr(rslt)
+
+  def prepend_node(self, node_descr) :
+    node_proxy = NodeProxy.from_descr(node_descr)
+    print "Trying to prepend node", node_proxy.id
+    return self.node.prepend_node(node_proxy)
+
+  def setup(self, predecessor, fingers, data) :
+    print ("Setup called with predecessor %s, fingers %s, and data %s" %
+           (predecessor, fingers, data))
+    return self.node.setup(NodeProxy.from_descr(predecessor),
+                           [NodeProxy.from_descr(finger) for finger in fingers],
+                           data)
+
+  def debug_get_fingers(self) :
+    # Note keys of dictionaries passed through XML-RPC must be strings
+    finger_dict = dict(
+      (str(step), self._serialize_node_descr(finger))
+       for step, finger in zip(self.node.finger_steps, self.node.fingers))
+    print finger_dict
+    return finger_dict
+
 
 
 def start_in_thread(server) :
@@ -85,6 +110,7 @@ def start(port, node=None, cloud_addrs=[], forever=True) :
 
   service = DyschordService(node)
   service.url = "http://localhost:%d" % port
+  service.node.url = service.url
   server.register_instance(service)
 
   server_thread = None
@@ -112,9 +138,12 @@ def start(port, node=None, cloud_addrs=[], forever=True) :
         # on all, unless there is a problem with chords, and the node
         # cloud has split in two.
         continue
+      print "Found successor:"
+      print "\ttype(successor):", type(successor)
+      print "\tsuccessor.id:", successor.id
 
       # What if this fails?  How could it fail?
-      successor.prepend_node(service.node)
+      successor.prepend_node(service.node, url=service.url)
       break
     
     else :
@@ -125,10 +154,13 @@ def start(port, node=None, cloud_addrs=[], forever=True) :
     while forever :
       pass
   except KeyboardInterrupt :
-    server.shutdown()
-    if server_thread is not None :
-      server_thread.join()
+    forever = True
     print "Exiting"
+  finally :
+    if forever :
+      server.shutdown()
+      if server_thread is not None :
+        server_thread.join()
 
   return service, server_thread
 

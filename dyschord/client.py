@@ -34,6 +34,8 @@ class TimeoutServerProxy(xmlrpclib.ServerProxy):
     xmlrpclib.ServerProxy.__init__(self,uri,*l,**kw)
 
 
+
+
 # NodeProxy object
 #
 # Acts like a local node, but all calls are remote.  If a node goes
@@ -42,6 +44,24 @@ class TimeoutServerProxy(xmlrpclib.ServerProxy):
 #
 # Closing the connection doesn't seem to work though.
 class NodeProxy(object) :
+  
+  # Node description functions
+  #
+  # Instead of sending the full objects, when we need to send node info
+  # (i.e. for pointing to the next item in the chain), we'll pass a
+  # description instead
+
+  @staticmethod
+  def proxy_to_node_descr(node, url=None) :
+    if not url :
+      url = node.url
+    return {"id": node.id, "url": url}
+
+  @classmethod
+  def from_descr(cls, descr) :
+    return cls(url=descr["url"], id=descr.get("id"))
+
+
   def __init__(self, url, id=None, timeout=2, verbose=True) :
     # Should parse the URL to makes sure it's http, or if not, add the protocol
     print "Creating node proxy to url %s with id %s" % (url, id)
@@ -61,13 +81,18 @@ class NodeProxy(object) :
     next = self.server.get_next()
     return NodeProxy(next["url"], id=next.get("id"))
 
+  @property
+  def predecessor(self) :
+    predecessor = self.server.get_predecessor()
+    return NodeProxy(predecessor["url"], id=predecessor.get("id"))
+
   def close(self) :
     self.server("close")()
 
   def find_node(self, key_hash) :
     node_info = self.server.find_node(key_hash)
     print "Making new proxy for", node_info
-    return NodeProxy(node_info["url"], id=node_info.get("id"))
+    return NodeProxy.from_descr(node_info)
 
   def __getattr__(self, attr) :
     # Maybe it's a method on the server...
@@ -78,9 +103,15 @@ class NodeProxy(object) :
     print "Saying result is:", node_info
     if node_info["url"] == self.url :
       return self
-    return NodeProxy(node_info["url"], id=node_info.get("id"), verbose=True)
+    return NodeProxy.from_descr(node_info)
 
+  def prepend_node(self, node, url=None) :
+    return self.server.prepend_node(self.proxy_to_node_descr(node, url))
 
+  def setup(self, predecessor, fingers, data) :
+    self.server.setup(self.proxy_to_node_descr(predecessor),
+                      [self.proxy_to_node_descr(finger) for finger in fingers],
+                      self.data)
 
 # Non-peer client
 class Client(object) :
