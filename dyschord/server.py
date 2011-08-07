@@ -9,7 +9,7 @@ import json
 import threading
 
 from . import readwritelock
-from . import node
+from . import node as core
 from .client import NodeProxy
 
 # Threaded XML RPC Server
@@ -17,10 +17,10 @@ class ThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer) :
   """Threading XML-RPC Server"""
 
 # Can derive from the Node class itself
-class DyschordService(node.DistributedHash) :
-  def __init__(self, id=None) :
-    self.node = node.Node(id)
-    node.DistributedHash.__init__(self, self.node)
+class DyschordService(core.DistributedHash) :
+  def __init__(self, mynode) :
+    self.node = mynode
+    core.DistributedHash.__init__(self, self.node)
 
   def ping(self) :
     return {"id": str(self.get_id())}
@@ -33,7 +33,7 @@ class DyschordService(node.DistributedHash) :
     if (self.node.distance(key_hash, self.node.id)
         <= self.node.distance(key_hash, self.node.predecessor.id)) :
       return self.node[key]
-    target_node = node.find_node(self.node, key_hash)
+    target_node = core.find_node(self.node, key_hash)
     return target_node.lookup(key)
 
   def store(self, key, value) :
@@ -42,7 +42,7 @@ class DyschordService(node.DistributedHash) :
         <= self.node.distance(key_hash, self.node.predecessor.id)) :
       self.node[key] = value
       return
-    target_node = node.find_node(self.node, key_hash)
+    target_node = core.find_node(self.node, key_hash)
     target_node.store(key, value)
 
   def find_successor(self, key_hash) :
@@ -60,18 +60,20 @@ def start_in_thread(server) :
 
   
   
-def start(port, nodeid=None, cloud_addrs=[], forever=True) :
+def start(port, node=None, cloud_addrs=[], forever=True) :
   # I don't know what the "localhost" part of the server address is
   # for.  It looks like it's used to bind the socket, so it should
   # always be localhost.  (Unless it can be used to bind to just
   # interface of a system with multiple ip addresses?)
+  if node is None :
+    node = core.Node()
   server = ThreadedXMLRPCServer(("localhost", port),
                                 logRequests=True,
                                 allow_none=True)
   server.register_introspection_functions()
   server.register_multicall_functions()
 
-  service = DyschordService()
+  service = DyschordService(node)
   server.register_instance(service)
 
   server_thread = None
@@ -80,6 +82,10 @@ def start(port, nodeid=None, cloud_addrs=[], forever=True) :
     print "Use Contrl-C to exit"
     server_thread = start_in_thread(server)
     for cloud_addr in cloud_addrs :
+      # Simple check so I can use the same configuration file for
+      # multiple test servers.
+      if cloud_addr == "localhost:%d" % port :
+        continue
       neighbor = NodeProxy(cloud_addr)
       try :
         neighbor.ping()
@@ -87,7 +93,7 @@ def start(port, nodeid=None, cloud_addrs=[], forever=True) :
         # Node down.  Try next in list
         continue
       try :
-        successor = node.find_node(neighbor, service.id)
+        successor = core.find_node(neighbor, service.id)
       except (socket.timeout, socket.error) :
         # A node in the chain is down, although I will make the
         # individual nodes smart enough to work around that...  The
@@ -123,6 +129,8 @@ def main(args=sys.argv) :
   parser.add_option("--conf", default="dyschord.conf",
                     help="Config file [default: %default]")
   parser.add_option("-p", "--port", type=int)
+  parser.add_option("--id", type=int,
+                    help="Id value of node")
   options, args = parser.parse_args(args)
   try :
     config = json.load(open(options.conf))
@@ -133,7 +141,12 @@ def main(args=sys.argv) :
 
   if options.port :
     config["port"] = options.port
-  start(config.get("port", 10000), config.get("node_id"),
+  if options.id :
+    config["node_id"] = options.id
+
+  node = core.Node(config.get("node_id"))
+
+  start(config.get("port", 10000), node,
         cloud_addrs=config.get("cloud_members", []))
 
 
