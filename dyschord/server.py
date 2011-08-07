@@ -37,7 +37,13 @@ class DyschordService(node.DistributedHash) :
     return target_node.lookup(key)
 
   def store(self, key, value) :
-    pass
+    key_hash = self.node.hash_key(key)
+    if (self.node.distance(key_hash, self.node.id)
+        <= self.node.distance(key_hash, self.node.predecessor.id)) :
+      self.node[key] = value
+      return
+    target_node = node.find_node(self.node, key_hash)
+    target_node.store(key, value)
 
   def find_successor(self, key_hash) :
     return self.node.find_successor(key_hash)
@@ -54,12 +60,11 @@ def start_in_thread(server) :
 
   
   
-def start(port, nodeid=None, cloud_addrs=[]) :
+def start(port, nodeid=None, cloud_addrs=[], forever=True) :
   # I don't know what the "localhost" part of the server address is
   # for.  It looks like it's used to bind the socket, so it should
   # always be localhost.  (Unless it can be used to bind to just
   # interface of a system with multiple ip addresses?)
-  print "Starting service on port", port
   server = ThreadedXMLRPCServer(("localhost", port),
                                 logRequests=True,
                                 allow_none=True)
@@ -69,9 +74,11 @@ def start(port, nodeid=None, cloud_addrs=[]) :
   service = DyschordService()
   server.register_instance(service)
 
-  print "Use Contrl-C to exit"
-  server_thread = start_in_thread(server)
+  server_thread = None
   try :
+    print "Starting service on port", port
+    print "Use Contrl-C to exit"
+    server_thread = start_in_thread(server)
     for cloud_addr in cloud_addrs :
       neighbor = NodeProxy(cloud_addr)
       try :
@@ -90,20 +97,24 @@ def start(port, nodeid=None, cloud_addrs=[]) :
         continue
 
       # What if this fails?  How could it fail?
-      successor.prepend_node(node)
+      successor.prepend_node(service.node)
       break
     
     else :
       print "Unable to find other nodes to join"
+
     # All initialized
-    node.initialized = True
-    while True :
+    service.node.initialized = True
+    while forever :
       pass
   except KeyboardInterrupt :
     server.shutdown()
     if server_thread is not None :
       server_thread.join()
     print "Exiting"
+
+  return service, server_thread
+
 
 import optparse
 

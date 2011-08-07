@@ -34,7 +34,6 @@ class TimeoutServerProxy(xmlrpclib.ServerProxy):
     xmlrpclib.ServerProxy.__init__(self,uri,*l,**kw)
 
 
-
 # NodeProxy object
 #
 # Acts like a local node, but all calls are remote.  If a node goes
@@ -59,7 +58,9 @@ class NodeProxy(object) :
   def close(self) :
     self.server("close")()
 
-    
+  def find_node(self, key_hash) :
+    node_info = self.server.find_node(key_hash)
+    return NodeProxy(node_info["url"], id=node_info.get("id"))
 
   def __getattr__(self, attr) :
     # Maybe it's a method on the server...
@@ -84,7 +85,19 @@ class Client(object) :
   def lookup(self, key) :
     for peer_id, peer in self.cloud.items() :
       try :
-        peer.lookup(key)
+        return peer.lookup(key)
+      except (socket.error, socket.timeout) :
+        # Error connecting to node
+        del self.cloud[peer_id]
+        continue
+      break
+    if not self.cloud :
+      raise Exception("Unable to connect to any nodes")
+
+  def store(self, key, value) :
+    for peer_id, peer in self.cloud.items() :
+      try :
+        peer.store(key, value)
       except (socket.error, socket.timeout) :
         # Error connecting to node
         del self.cloud[peer_id]
