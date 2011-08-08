@@ -295,8 +295,8 @@ class Node(MutableMapping) :
         # Setup new node
         delegated_data = {}
         for k, v in successor.iteritems() :
-          if (newnode.distance(newnode.hash_key(k), newnode.id)
-              < newnode.distance(newnode.hash_key(k), successor.id)) :
+          if (self.distance(self.hash_key(k), newnode.id)
+              < self.distance(self.hash_key(k), successor.id)) :
             delegated_data[k] = v
         newnode.setup(predecessor, list(predecessor.fingers), delegated_data)
 
