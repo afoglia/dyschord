@@ -145,16 +145,26 @@ class Client(object) :
     known_peers = list(self.cloud.values())
     while len(self.cloud) < self.min_connections and known_peers :
       peer = known_peers.pop(0)
-      others = peer.get_fingers()
+      try :
+        others = peer.get_fingers()
+      except (socket.error, socket.timeout) :
+        del self.cloud[peer.url]
+        continue
       for finger in others.itervalues() :
         if finger.url not in self.cloud :
           self.cloud[finger.url] = finger
           known_peers.append(finger)
+    if not self.cloud :
+      raise Exception("Unable to connect to any peers")
     if len(self.cloud) < self.min_connections :
       self.logger.warn("Only aware of %d peers", len(self.cloud))
 
 
   def lookup(self, key) :
+    # Note: keys are str not basestring, to avoid worrying about unicode issues
+    if not isinstance(key, str) :
+      raise Exception("Unable to handle nonstring key %s" % key)
+    self._find_connections()
     for peer_id, peer in self.cloud.items() :
       try :
         return peer.lookup(key)
@@ -167,6 +177,9 @@ class Client(object) :
       raise Exception("Unable to connect to any nodes")
 
   def store(self, key, value) :
+    if not isinstance(key, str) :
+      raise Exception("Unable to handle nonstring key %s" % key)
+    self._find_connections()
     for peer_id, peer in self.cloud.items() :
       try :
         peer.store(key, value)
