@@ -298,6 +298,7 @@ class Node(MutableMapping) :
           if (self.distance(self.hash_key(k), newnode.id)
               < self.distance(self.hash_key(k), successor.id)) :
             delegated_data[k] = v
+        self.logger.debug("Sending data: %s", delegated_data)
         newnode.setup(predecessor, list(predecessor.fingers), delegated_data)
 
         # Establish new fingers to bring the new node into chain
@@ -311,9 +312,14 @@ class Node(MutableMapping) :
 
   def setup(self, predecessor, fingers, data) :
     with self.finger_lock.wrlocked() :
+      self.logger.debug("Setting up node with predecessor: %s", predecessor.id)
       self.predecessor = predecessor
+      self.logger.debug("Setting up node with initial fingers: %s",
+                        [(finger.id, getattr(finger, "url", None))
+                         for finger in fingers])
       self.fingers = fingers
     with self.data_lock.wrlocked() :
+      self.logger.debug("Setting up node with data: %s", data)
       self.data.update(data)
     self.initialized = True
 
