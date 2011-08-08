@@ -208,11 +208,6 @@ class Node(MutableMapping) :
     with self.data_lock.rdlocked() :
       return len(self.data)
 
-  # def find_successor(self, key_hash) :
-  #   if distance(self.id, key_hash) >= distance(self.predecessor.id, key_hash) :
-  #     return self
-  #   else :
-  #     return self.closest_preceding_node(key_hash).find_successor(key_hash)
 
   @initialization_check
   def closest_preceding_node(self, key_hash) :
