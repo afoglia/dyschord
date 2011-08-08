@@ -6,6 +6,8 @@ import bisect
 from collections import MutableMapping
 import logging
 
+from . import readwritelock
+
 _logger = logging.getLogger("dyschord.core")
 
 class Md5Metric(object) :
@@ -140,6 +142,8 @@ class Node(MutableMapping) :
     self.fingers = [self for f in self.finger_steps]
     self.initialized = False
     self.logger = _logger.getChild("Node")
+    self.data_lock = readwritelock.RWLock()
+    self.finger_lock = readwritelock.RWLock()
 
   @property
   def distance(self) :
@@ -166,28 +170,42 @@ class Node(MutableMapping) :
 
   @initialization_check
   def __getitem__(self, key) :
-    return self.data[key]
+    with self.data_lock.rdlocked() :
+      return self.data[key]
 
   @initialization_check
   def __setitem__(self, key, value) :
-    self.data[key] = value
+    with self.data_lock.wrlocked() :
+      self.data[key] = value
 
   @initialization_check
   def __delitem__(self, key) :
-    del self.data[key]
+    with self.data_lock.wrlocked() :
+      del self.data[key]
 
   @initialization_check
   def iterkeys(self) :
+    # Locking this is not easy, and would require a custom generator.
+    # Instead I won't bother and fall back on the same failure cases
+    # that a normal python dictionary has (e.g. iterators throw
+    # exceptions if the keys of the underlying dict have changes.)
     return self.data.iterkeys()
   __iter__ = iterkeys
 
   @initialization_check
+  def keys(self) :
+    with self.data_lock.rdlocked() :
+      return self.data.iterkeys()
+
+  @initialization_check
   def __contains__(self, key) :
-    return key in self.data
+    with self.data_lock.rdlocked() :
+      return key in self.data
 
   @initialization_check
   def __len__(self) :
-    return len(self.data)
+    with self.data_lock.rdlocked() :
+      return len(self.data)
 
   # def find_successor(self, key_hash) :
   #   if distance(self.id, key_hash) >= distance(self.predecessor.id, key_hash) :
@@ -197,52 +215,55 @@ class Node(MutableMapping) :
 
   @initialization_check
   def closest_preceding_node(self, key_hash) :
-    # If I were sure the metric was going to be the "clockwise"
-    # distance, then I could use distance_to_node =
-    # -distance_from_node % 2**hash_bits, but I want to keep the
-    # flexibility and clarity in case I try a different topology.
-    distance = self.distance
-    distance_from_node = distance(self.id, key_hash)
-    self.logger.log(5, "Distance from node: %d", distance_from_node)
-    if distance_from_node == 0 :
-      return self.predecessor
-    distance_to_node = distance(key_hash, self.id)
-    for finger_step, finger in \
-          reversed(zip(self.finger_steps, self.fingers)) :
-      self.logger.log(5, "Finger distance: %d", distance(key_hash, finger.id))
-      if finger.id == key_hash :
-        return finger.predecessor
-      if finger_step >= distance_from_node :
-        continue
-      if (distance_to_node < distance(key_hash, finger.id)) :
-        self.logger.log(5, "Advancing to finger %d", finger.id)
-        return finger
-    return self
+    with self.finger_lock.rdlocked() :
+      # If I were sure the metric was going to be the "clockwise"
+      # distance, then I could use distance_to_node =
+      # -distance_from_node % 2**hash_bits, but I want to keep the
+      # flexibility and clarity in case I try a different topology.
+      distance = self.distance
+      distance_from_node = distance(self.id, key_hash)
+      self.logger.log(5, "Distance from node: %d", distance_from_node)
+      if distance_from_node == 0 :
+        return self.predecessor
+      distance_to_node = distance(key_hash, self.id)
+      for finger_step, finger in \
+            reversed(zip(self.finger_steps, self.fingers)) :
+        self.logger.log(5, "Finger distance: %d", distance(key_hash, finger.id))
+        if finger.id == key_hash :
+          return finger.predecessor
+        if finger_step >= distance_from_node :
+          continue
+        if (distance_to_node < distance(key_hash, finger.id)) :
+          self.logger.log(5, "Advancing to finger %d", finger.id)
+          return finger
+      return self
 
   def update_fingers(self) :
-    for i, step in enumerate(self.finger_steps) :
-      old = self.fingers[i]
-      self.fingers[i] = find_node(old, ((self.id+step)
-                                        % 2**self.__metric.hash_bits))
+    with self.finger_lock.wrlocked() :
+      for i, step in enumerate(self.finger_steps) :
+        old = self.fingers[i]
+        self.fingers[i] = find_node(old, ((self.id+step)
+                                          % 2**self.__metric.hash_bits))
 
   def update_fingers_on_insert(self, newnode) :
-    # Faster updating when new node is added.
-    self.logger.debug("Updating fingers on node %d for new node %d",
-                      self.id, newnode.id)
-    for i, step in enumerate(self.finger_steps) :
-      old_finger = self.fingers[i]
-      if old_finger.id == newnode.id :
-        # Already registered.  Probably set to next during joining
-        continue
-      if (old_finger.id != self.id
-          and (self.distance(self.id, old_finger.id)
-               < self.distance(self.id, newnode.id))) :
-        continue
-      self.logger.log(5, "Updating finger %d pointing %d away", i, step)
-      self.fingers[i] = find_node(old_finger, ((self.id+step)
-                                               % 2**self.__metric.hash_bits))
-      if self.fingers[i].id == old_finger.id :
-        break
+    with self.finger_lock.wrlocked() :
+      # Faster updating when new node is added.
+      self.logger.debug("Updating fingers on node %d for new node %d",
+                        self.id, newnode.id)
+      for i, step in enumerate(self.finger_steps) :
+        old_finger = self.fingers[i]
+        if old_finger.id == newnode.id :
+          # Already registered.  Probably set to next during joining
+          continue
+        if (old_finger.id != self.id
+            and (self.distance(self.id, old_finger.id)
+                 < self.distance(self.id, newnode.id))) :
+          continue
+        self.logger.log(5, "Updating finger %d pointing %d away", i, step)
+        self.fingers[i] = find_node(old_finger, ((self.id+step)
+                                                 % 2**self.__metric.hash_bits))
+        if self.fingers[i].id == old_finger.id :
+          break
 
   @initialization_check
   def prepend_node(self, newnode) :
@@ -253,43 +274,47 @@ class Node(MutableMapping) :
     # successor's control is blocked.
 
     # Ensure the node is correct
-    successor = self
-    predecessor = self.predecessor
-    if predecessor is None :
-      # Must be first joining...
-      predecessor = self
-    if self.id == newnode.id :
-      raise Exception("Preexisting node with id")
-    distance_to_newnode = self.distance(self.id, newnode.id)
-    distance_to_predecessor = self.distance(self.id, predecessor.id)
-    if distance_to_newnode < distance_to_predecessor :
-      raise Exception("Nodes must be attached to their successor")
-    if distance_to_newnode == distance_to_predecessor :
-      # Should ping the successor to make sure it's still up.
-      raise Exception("Preexisting node with id")
+    with self.finger_lock.wrlocked() :
+      successor = self
+      predecessor = self.predecessor
+      if predecessor is None :
+        # Must be first joining...
+        predecessor = self
+      if self.id == newnode.id :
+        raise Exception("Preexisting node with id")
+      distance_to_newnode = self.distance(self.id, newnode.id)
+      distance_to_predecessor = self.distance(self.id, predecessor.id)
+      if distance_to_newnode < distance_to_predecessor :
+        raise Exception("Nodes must be attached to their successor")
+      if distance_to_newnode == distance_to_predecessor :
+        # Should ping the successor to make sure it's still up.
+        raise Exception("Preexisting node with id")
 
-    self.logger.debug("Preparing data to send")
-    # Setup new node
-    delegated_data = {}
-    for k, v in successor.iteritems() :
-      if (newnode.distance(newnode.hash_key(k), newnode.id)
-          < newnode.distance(newnode.hash_key(k), successor.id)) :
-        delegated_data[k] = v
-    newnode.setup(predecessor, list(predecessor.fingers), delegated_data)
+      self.logger.debug("Preparing data to send")
+      with self.data_lock.wrlocked() :
+        # Setup new node
+        delegated_data = {}
+        for k, v in successor.iteritems() :
+          if (newnode.distance(newnode.hash_key(k), newnode.id)
+              < newnode.distance(newnode.hash_key(k), successor.id)) :
+            delegated_data[k] = v
+        newnode.setup(predecessor, list(predecessor.fingers), delegated_data)
 
-    # Establish new fingers to bring the new node into chain
-    predecessor.fingers[0] = newnode
-    successor.predecessor = newnode
+        # Establish new fingers to bring the new node into chain
+        predecessor.fingers[0] = newnode
+        successor.predecessor = newnode
 
-    for k in delegated_data :
-      # Should move to a backup, should I have time to establish that.
-      del self.data[k]
+        for k in delegated_data :
+          # Should move to a backup, should I have time to establish that.
+          del self.data[k]
 
 
   def setup(self, predecessor, fingers, data) :
-    self.predecessor = predecessor
-    self.fingers = fingers
-    self.data.update(data)
+    with self.finger_lock.wrlocked() :
+      self.predecessor = predecessor
+      self.fingers = fingers
+    with self.data_lock.wrlocked() :
+      self.data.update(data)
     self.initialized = True
 
 
