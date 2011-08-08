@@ -115,20 +115,44 @@ class NodeProxy(object) :
                       [self.proxy_to_node_descr(finger) for finger in fingers],
                       self.data)
 
+  def get_fingers(self) :
+    fingers = self.server.get_fingers()
+    fingers = dict((int(step), NodeProxy.from_descr(descr))
+                   for step, descr in fingers.iteritems())
+    return fingers
+
+
 # Non-peer client
 class Client(object) :
-  def __init__(self, cloud) :
+  def __init__(self, peers, min_connections=3) :
+    self.logger = logging.getLogger("dyschord.client")
     self.cloud = {}
-    for c in cloud :
-      peer = NodeProxy(c)
+    for p in peers :
+      peer = NodeProxy(p)
       try :
         peer_id = peer.id
       except (socket.error, socket.timeout) :
         # Error connecting to node
         continue
-      self.cloud[c] = peer
+      self.cloud[p] = peer
     if not self.cloud :
       raise Exception("Unable to connect to any nodes")
+    self.min_connections = min_connections
+    if len(self.cloud) < self.min_connections :
+      self._find_connections()
+
+  def _find_connections(self) :
+    known_peers = list(self.cloud.values())
+    while len(self.cloud) < self.min_connections and known_peers :
+      peer = known_peers.pop(0)
+      others = peer.get_fingers()
+      for finger in others.itervalues() :
+        if finger.url not in self.cloud :
+          self.cloud[finger.url] = finger
+          known_peers.append(finger)
+    if len(self.cloud) < self.min_connections :
+      self.logger.warn("Only aware of %d peers", len(self.cloud))
+
 
   def lookup(self, key) :
     for peer_id, peer in self.cloud.items() :

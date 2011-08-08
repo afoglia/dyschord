@@ -82,7 +82,7 @@ class DyschordService(core.DistributedHash) :
                            [NodeProxy.from_descr(finger) for finger in fingers],
                            data)
 
-  def debug_get_fingers(self) :
+  def get_fingers(self) :
     # Note keys of dictionaries passed through XML-RPC must be strings
     finger_dict = dict(
       (str(step), self._serialize_node_descr(finger))
@@ -141,9 +141,6 @@ def start(port, node=None, cloud_addrs=[], forever=True) :
         # on all, unless there is a problem with chords, and the node
         # cloud has split in two.
         continue
-      print "Found successor:"
-      print "\ttype(successor):", type(successor)
-      print "\tsuccessor.id:", successor.id
 
       # What if this fails?  How could it fail?
       successor.prepend_node(service.node, url=service.url)
