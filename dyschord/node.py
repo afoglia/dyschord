@@ -5,6 +5,7 @@ import functools
 import bisect
 from collections import MutableMapping
 import logging
+import socket
 
 from . import readwritelock
 
@@ -237,6 +238,59 @@ class Node(MutableMapping) :
           self.logger.log(5, "Advancing to finger %d", finger.id)
           return finger
       return self
+
+  def ping(self) :
+    # Default ping method
+    return {"id": str(self.id)}
+
+  def repair_fingers(self) :
+    self.logger.info("Repairing fingers")
+    furthest_known = self
+    with self.finger_lock.wrlocked() :
+      self.logger.debug("Old fingers: %s", [f.id for f in self.fingers])
+      for i, finger in enumerate(self.fingers) :
+        try :
+          finger.ping()
+        except (socket.error, socket.timeout) :
+          self.fingers[i] = furthest_known
+        else :
+          furthest_known = finger
+      self.logger.debug("Corrected fingers: %s", [f.id for f in self.fingers])
+      # All point somewhere, now I can update to correct them.
+      self.update_fingers()
+      self.logger.debug("Updated corrected fingers: %s",
+                        [f.id for f in self.fingers])
+
+  def repair_predecessor(self) :
+    # I'll use the finger lock because the predecessor is essentially
+    # another finger.
+    self.logger.debug("Repairing predecessor")
+    with self.finger_lock.wrlocked() :
+      self.logger.debug("Old predecessor", self.predecessor.id)
+      try :
+        self.predecessor.ping()
+      except (socket.error, socket.timeout) :
+        # No.  I can't be me... Who should it be...
+        furthest_known = self
+        idx = len(self.fingers)
+        while furthest_known.id == self.id and idx >= 0 :
+          idx -= 1
+          if self.fingers[idx].id != self.id :
+            furthest_known = self.fingers[idx]
+        if furthest_known.id == self.id :
+          self.logger.warn("Unable to find any other nodes")
+          self.predecessor = self
+          return
+
+        # Need to actually walk the successors...
+        predecessor = furthest_known
+        for node in walk(furthest_known) :
+          if node.id == self.id :
+            break
+          else :
+            predecessor = node
+        self.predecessor = predecessor
+
 
   def update_fingers(self) :
     with self.finger_lock.wrlocked() :

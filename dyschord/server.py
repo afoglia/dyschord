@@ -36,10 +36,17 @@ class DyschordService(core.DistributedHash) :
 
   def lookup(self, key) :
     key_hash = self.node.hash_key(key)
-    if (self.node.distance(key_hash, self.node.id)
-        <= self.node.distance(key_hash, self.node.predecessor.id)) :
-      return self.node[key]
-    target_node = core.find_node(self.node, key_hash)
+    ntries = 2
+    while ntries > 0 :
+      ntries -= 1
+      try :
+        if (self.node.distance(key_hash, self.node.id)
+            <= self.node.distance(key_hash, self.node.predecessor.id)) :
+          return self.node[key]
+        target_node = core.find_node(self.node, key_hash)
+      except (socket.error, socket.timeout) :
+        self.node.repair_fingers()
+        self.node.repair_predecessor()
     return target_node.lookup(key)
 
   def store(self, key, value) :
