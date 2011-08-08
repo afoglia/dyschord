@@ -94,7 +94,7 @@ class JoinTest(unittest.TestCase) :
     dh = dyschord.DistributedHash()
     for node in self.nodes.itervalues() :
       dh.join(node)
-    dh.store(1, "one")
+    dh.store("1", "one")
     for k, node in self.nodes.iteritems() :
       self.assertEquals(len(node), 0 if k!=3 else 1)
     self.nodes[5] = self.Node(5)
@@ -106,7 +106,7 @@ class JoinTest(unittest.TestCase) :
     dh = dyschord.DistributedHash()
     for node in self.nodes.itervalues() :
       dh.join(node)
-    dh.store(1, "one")
+    dh.store("1", "one")
     for k, node in self.nodes.iteritems() :
       self.assertEquals(len(node), 0 if k!=3 else 1)
     self.nodes[2] = self.Node(2)
@@ -118,7 +118,7 @@ class JoinTest(unittest.TestCase) :
     dh = dyschord.DistributedHash()
     for node in self.nodes.itervalues() :
       dh.join(node)
-    dh.store(1, "one")
+    dh.store("1", "one")
     for k, node in self.nodes.iteritems() :
       self.assertEquals(len(node), 0 if k!=3 else 1)
     self.nodes[1] = self.Node(1)
@@ -144,7 +144,7 @@ class LeaveTest(unittest.TestCase) :
 
   def testLeaveWithData(self) :
     dh = self.distributed_hash
-    dh.store(1, "one")
+    dh.store("1", "one")
     self.assertEqual(len(dh), 1)
     for k, node in self.nodes.iteritems() :
       self.assertEquals(len(node), 0 if k!=3 else 1)
@@ -157,7 +157,7 @@ class LeaveTest(unittest.TestCase) :
 
   def testLeaveWithDataMove(self) :
     dh = self.distributed_hash
-    dh.store(1, "one")
+    dh.store("1", "one")
     self.assertEquals(len(dh), 1)
     for k, node in self.nodes.iteritems() :
       self.assertEquals(len(node), 0 if k!=3 else 1)
@@ -170,7 +170,7 @@ class LeaveTest(unittest.TestCase) :
 
   def testLeaveWithDataMoveMatchOldId(self) :
     dh = self.distributed_hash
-    dh.store(0, "zero")
+    dh.store("0", "zero")
     self.assertEquals(len(dh), 1)
     for k, node in self.nodes.iteritems() :
       self.assertEquals(len(node), 0 if k!=0 else 1)
@@ -190,18 +190,18 @@ class SimpleTest(unittest.TestCase) :
 
   def testOneValue(self) :
     self.assertEquals(len(self.distributed_hash), 0)
-    self.distributed_hash.store(0, "zero")
+    self.distributed_hash.store("0", "zero")
     self.assertEquals(len(self.distributed_hash), 1)
-    self.assertEquals(self.distributed_hash.lookup(0), "zero")
+    self.assertEquals(self.distributed_hash.lookup("0"), "zero")
 
   def testLookupMissing(self) :
     self.assertRaises(KeyError, self.distributed_hash.lookup, 0)
 
   def testDeletion(self) :
     self.assertEquals(len(self.distributed_hash), 0)
-    self.distributed_hash.store(0, "zero")
+    self.distributed_hash.store("0", "zero")
     self.assertEquals(len(self.distributed_hash), 1)
-    self.distributed_hash.delete(0)
+    self.distributed_hash.delete("0")
     self.assertEquals(len(self.distributed_hash), 0)
     self.assertRaises(KeyError, self.distributed_hash.lookup, 0)
 

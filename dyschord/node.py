@@ -42,7 +42,7 @@ class TrivialMetric(Md5Metric) :
     Md5Metric.__init__(self, hash_bits)
 
   def hash_key(self, key) :
-    return key % 2**self.hash_bits
+    return int(key) % 2**self.hash_bits
 
 
 
