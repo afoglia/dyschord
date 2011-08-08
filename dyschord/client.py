@@ -1,5 +1,6 @@
 import xmlrpclib
 import socket
+import logging
 
 # Timeout XML-RPC ServerProxy code.
 #
@@ -64,10 +65,11 @@ class NodeProxy(object) :
 
   def __init__(self, url, id=None, timeout=2, verbose=True) :
     # Should parse the URL to makes sure it's http, or if not, add the protocol
-    print "Creating node proxy to url %s with id %s" % (url, id)
     self.url = url
     self.server = TimeoutServerProxy(url, timeout=timeout, verbose=verbose)
     self.__id = id
+    self.logger = logging.getLogger("dyschord.nodeproxy")
+    self.logger.debug("Created node proxy to url %s with id %s", url, id)
 
   @property
   def id(self) :
@@ -91,7 +93,7 @@ class NodeProxy(object) :
 
   def find_node(self, key_hash) :
     node_info = self.server.find_node(key_hash)
-    print "Making new proxy for", node_info
+    self.logger.debug("Making new proxy for %s", node_info)
     return NodeProxy.from_descr(node_info)
 
   def __getattr__(self, attr) :
@@ -100,7 +102,7 @@ class NodeProxy(object) :
 
   def closest_preceding_node(self, key_hash) :
     node_info = self.server.closest_preceding_node(key_hash)
-    print "Saying result is:", node_info
+    self.logger.debug("Closest node to %d is %s", key_hash, node_info)
     if node_info["url"] == self.url :
       return self
     return NodeProxy.from_descr(node_info)

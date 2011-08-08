@@ -8,6 +8,8 @@ import sys
 import json
 import threading
 import socket
+import logging
+import logging.config
 
 from . import readwritelock
 from . import node as core
@@ -23,6 +25,7 @@ class DyschordService(core.DistributedHash) :
     self.node = mynode
     core.DistributedHash.__init__(self, self.node)
     self.url = None
+    self.logger = logging.getLogger("dyschord.service")
 
   def ping(self) :
     return {"id": str(self.get_id())}
@@ -68,12 +71,13 @@ class DyschordService(core.DistributedHash) :
 
   def prepend_node(self, node_descr) :
     node_proxy = NodeProxy.from_descr(node_descr)
-    print "Trying to prepend node", node_proxy.id
+    self.logger.debug("Trying to prepend node %d", node_proxy.id)
     return self.node.prepend_node(node_proxy)
 
   def setup(self, predecessor, fingers, data) :
-    print ("Setup called with predecessor %s, fingers %s, and data %s" %
-           (predecessor, fingers, data))
+    self.logger.debug(
+      "Setup called with predecessor %s, fingers %s, and data %s",
+      predecessor, fingers, data)
     return self.node.setup(NodeProxy.from_descr(predecessor),
                            [NodeProxy.from_descr(finger) for finger in fingers],
                            data)
@@ -83,7 +87,6 @@ class DyschordService(core.DistributedHash) :
     finger_dict = dict(
       (str(step), self._serialize_node_descr(finger))
        for step, finger in zip(self.node.finger_steps, self.node.fingers))
-    print finger_dict
     return finger_dict
 
 
@@ -174,13 +177,19 @@ def main(args=sys.argv) :
   parser.add_option("-p", "--port", type=int)
   parser.add_option("--id", type=int,
                     help="Id value of node")
+  parser.add_option("--log-config", dest="log_config",
+                    help="Logging configuration ini file")
   options, args = parser.parse_args(args)
+
   try :
     config = json.load(open(options.conf))
   except Exception, e :
     sys.stderr.write("Unable to parse config file %s\n" % options.conf)
     sys.stderr.write("Exception: %s\n" % e)
     sys.exit(1)
+
+  if options.log_config :
+    logging.config.fileConfig(options.log_config)
 
   if options.port :
     config["port"] = options.port

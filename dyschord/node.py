@@ -4,7 +4,9 @@ import uuid
 import functools
 import bisect
 from collections import MutableMapping
+import logging
 
+_logger = logging.getLogger("dyschord.core")
 
 class Md5Metric(object) :
   # Since both the md5 and uuid are 128-bit, I can use the former for
@@ -55,7 +57,8 @@ def compute_finger_steps(hash_bits, finger_table_size) :
 
 # Node finding function taken from <http://www.linuxjournal.com/article/6797>
 def find_predecessor(start, key_hash) :
-  # print "Finding predecessor for %d starting at node %d" % (key_hash, start.id)
+  _logger.debug("Finding predecessor for %d starting at node %d",
+                key_hash, start.id)
   current = start
   while True :
     next = current.closest_preceding_node(key_hash)
@@ -136,6 +139,7 @@ class Node(MutableMapping) :
       self.__metric.hash_bits, nfingers)
     self.fingers = [self for f in self.finger_steps]
     self.initialized = False
+    self.logger = _logger.getChild("Node")
 
   @property
   def distance(self) :
@@ -199,19 +203,19 @@ class Node(MutableMapping) :
     # flexibility and clarity in case I try a different topology.
     distance = self.distance
     distance_from_node = distance(self.id, key_hash)
-    # print "Distance from node:", distance_from_node
+    self.logger.log(5, "Distance from node: %d", distance_from_node)
     if distance_from_node == 0 :
       return self.predecessor
     distance_to_node = distance(key_hash, self.id)
     for finger_step, finger in \
           reversed(zip(self.finger_steps, self.fingers)) :
-      # print "Finger distance:", distance(key_hash, finger.id)
+      self.logger.log(5, "Finger distance: %d", distance(key_hash, finger.id))
       if finger.id == key_hash :
         return finger.predecessor
       if finger_step >= distance_from_node :
         continue
       if (distance_to_node < distance(key_hash, finger.id)) :
-        # print "Advancing to finger", finger.id
+        self.logger.log(5, "Advancing to finger %d", finger.id)
         return finger
     return self
 
@@ -223,7 +227,8 @@ class Node(MutableMapping) :
 
   def update_fingers_on_insert(self, newnode) :
     # Faster updating when new node is added.
-    # print "Updating fingers on node", self.id, "for newnode", newnode.id
+    self.logger.debug("Updating fingers on node %d for new node %d",
+                      self.id, newnode.id)
     for i, step in enumerate(self.finger_steps) :
       old_finger = self.fingers[i]
       if old_finger.id == newnode.id :
@@ -233,7 +238,7 @@ class Node(MutableMapping) :
           and (self.distance(self.id, old_finger.id)
                < self.distance(self.id, newnode.id))) :
         continue
-      # print "Updating finger", i, "pointing", step, "away"
+      self.logger.log(5, "Updating finger %d pointing %d away", i, step)
       self.fingers[i] = find_node(old_finger, ((self.id+step)
                                                % 2**self.__metric.hash_bits))
       if self.fingers[i].id == old_finger.id :
@@ -263,7 +268,7 @@ class Node(MutableMapping) :
       # Should ping the successor to make sure it's still up.
       raise Exception("Preexisting node with id")
 
-    # print "Preparing data to send:"
+    self.logger.debug("Preparing data to send")
     # Setup new node
     delegated_data = {}
     for k, v in successor.iteritems() :
