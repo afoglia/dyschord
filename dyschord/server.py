@@ -10,6 +10,7 @@ import threading
 import socket
 import logging
 import logging.config
+import time
 
 from . import readwritelock
 from . import node as core
@@ -152,6 +153,7 @@ def start(port, node=None, cloud_addrs=[], forever=True) :
     # All initialized
     service.node.initialized = True
     while forever :
+      time.sleep(10)
       pass
   except KeyboardInterrupt :
     forever = True
