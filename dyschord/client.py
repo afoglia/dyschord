@@ -113,7 +113,7 @@ class NodeProxy(object) :
   def setup(self, predecessor, fingers, data) :
     self.server.setup(self.proxy_to_node_descr(predecessor),
                       [self.proxy_to_node_descr(finger) for finger in fingers],
-                      self.data)
+                      data)
 
   def get_fingers(self) :
     fingers = self.server.get_fingers()
