@@ -66,7 +66,8 @@ class NodeProxy(object) :
   def __init__(self, url, id=None, timeout=2, verbose=True) :
     # Should parse the URL to makes sure it's http, or if not, add the protocol
     self.url = url
-    self.server = TimeoutServerProxy(url, timeout=timeout, verbose=verbose)
+    self.server = TimeoutServerProxy(url, timeout=timeout, verbose=verbose,
+                                     allow_none=True)
     self.__id = id
     self.logger = logging.getLogger("dyschord.nodeproxy")
     self.logger.debug("Created node proxy to url %s with id %s", url, id)
@@ -90,6 +91,11 @@ class NodeProxy(object) :
 
   def close(self) :
     self.server("close")()
+
+
+  def store_backup(self, key, value, predecessor) :
+    return self.server.store_backup(key, value,
+                                    self.proxy_to_node_descr(predecessor))
 
   def find_node(self, key_hash) :
     node_info = self.server.find_node(key_hash)

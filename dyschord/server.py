@@ -58,6 +58,11 @@ class DyschordService(core.DistributedHash) :
     target_node = core.find_node(self.node, key_hash)
     target_node.store(key, value)
 
+  def store_backup(self, key, value, predecessor) :
+    self.logger.debug("Storing backup of key-value (%s, %s)", key, value)
+    self.node.store_backup(key, value,
+                                  self._node_from_descr(predecessor))
+
   def _serialize_node_descr(self, node) :
     return {"id": node.id, "url": getattr(node, "url", self.url)}
 

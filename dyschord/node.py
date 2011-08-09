@@ -6,6 +6,7 @@ import bisect
 from collections import MutableMapping
 import logging
 import socket
+import itertools
 
 from . import readwritelock
 
@@ -142,6 +143,7 @@ class Node(MutableMapping) :
       self.__metric.hash_bits, nfingers)
     self.fingers = [self for f in self.finger_steps]
     self.initialized = False
+    self.n_backups = 1
     self.logger = _logger.getChild("Node")
     self.data_lock = readwritelock.RWLock()
     self.finger_lock = readwritelock.RWLock()
@@ -170,13 +172,62 @@ class Node(MutableMapping) :
     return "Node(id=%d)" % self.id
 
   @initialization_check
+  def _responsible_for(self, key_hash) :
+    if self.id == self.predecessor.id :
+      # Only node up
+      return True
+    return (self.distance(key_hash, self.id)
+            < self.distance(key_hash, self.predecessor.id))
+
+  @initialization_check
   def __getitem__(self, key) :
+    if not self._responsible_for(self.hash_key(key)) :
+      raise Exception("Node %d not responsible for key %d"
+                      % (self.id, self.hash_key(key)))
     with self.data_lock.rdlocked() :
       return self.data[key]
 
   @initialization_check
   def __setitem__(self, key, value) :
+    self.logger.debug("Setting key %s to value %s", key, value)
+    if not self._responsible_for(self.hash_key(key)) :
+      raise Exception("Node %d responsible for key %d"
+                      % (self.id, self.hash_key(key)))
     with self.data_lock.wrlocked() :
+      old_value_exists = True
+      try :
+        old_value = self.data[key]
+      except KeyError :
+        old_value_exists = False
+      self.data[key] = value
+      try :
+        self.logger.debug("Backing up in successors")
+        current = self
+        following = walk(self.next)
+        for node in itertools.islice(walk(self.next), self.n_backups) :
+          if self.id == node.id :
+            break
+          node.store_backup(key, value, current)
+          current = node
+      except Exception :
+        self.logger.info("Problem backing up data.  Rolling back")
+        if old_value_exists :
+          self.data[key] = old_value
+        else :
+          del self.data[key]
+        raise
+
+  @initialization_check
+  def store_backup(self, key, value, predecessor) :
+    # predecessor is the preceding node, as determined by the node
+    # who's data is being backed up.  If this does not match our
+    # actual predecessor, there is a problem with the pointers in the
+    # ring.  We'll throw an exception, try to fix it, and try setting
+    # the values again.
+    with self.data_lock.wrlocked() :
+      if predecessor.id != self.predecessor.id :
+        raise Exception(
+          "Mesh corruption: Storing backup for node %d, but actual predecessor is %d" % (predecessor.id, self.predecessor.id))
       self.data[key] = value
 
   @initialization_check
@@ -190,7 +241,8 @@ class Node(MutableMapping) :
     # Instead I won't bother and fall back on the same failure cases
     # that a normal python dictionary has (e.g. iterators throw
     # exceptions if the keys of the underlying dict have changes.)
-    return self.data.iterkeys()
+    return (k for k in self.data.iterkeys()
+            if self._responsible_for(self.hash_key(k)))
   __iter__ = iterkeys
 
   @initialization_check
@@ -205,8 +257,11 @@ class Node(MutableMapping) :
 
   @initialization_check
   def __len__(self) :
+    # Because I'm storing not storing the backup data in a separate
+    # dictionary, computing the length is not O(1), but O(n).
     with self.data_lock.rdlocked() :
-      return len(self.data)
+      return sum(1 for key in self.data
+                 if self._responsible_for(self.hash_key(key)))
 
 
   @initialization_check
@@ -327,7 +382,6 @@ class Node(MutableMapping) :
 
     # Ensure the node is correct
     with self.finger_lock.wrlocked() :
-      successor = self
       predecessor = self.predecessor
       if predecessor is None :
         # Must be first joining...
@@ -346,9 +400,9 @@ class Node(MutableMapping) :
       with self.data_lock.wrlocked() :
         # Setup new node
         delegated_data = {}
-        for k, v in successor.iteritems() :
+        for k, v in self.data.iteritems() :
           if (self.distance(self.hash_key(k), newnode.id)
-              < self.distance(self.hash_key(k), successor.id)) :
+              < self.distance(self.hash_key(k), self.id)) :
             delegated_data[k] = v
         self.logger.debug("Sending data: %s", delegated_data)
         newnode.setup(predecessor, dict(predecessor.get_fingers()),
@@ -356,7 +410,7 @@ class Node(MutableMapping) :
 
         # Establish new fingers to bring the new node into chain
         predecessor.fingers[0] = newnode
-        successor.predecessor = newnode
+        self.predecessor = newnode
 
         for k in delegated_data :
           # Should move to a backup, should I have time to establish that.
