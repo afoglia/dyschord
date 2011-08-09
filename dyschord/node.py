@@ -118,6 +118,19 @@ def initialization_check(wrappee) :
 # I could probably derive from a dictionary, and just add extra
 # properties and methods, but I might need to change too many
 # functions, especially when I want to persist the data to disk.
+#
+# Things I would change if I had time:
+#
+# 1. Store finger table in a separate object.  Keeping them separate
+# just makes a lot of the usage of the tables more complicated.
+#
+# 2. Don't store data in a dictionary from key to value, instead,
+# store it in a dictionary from key to a tuple of the hashed_key and
+# the value.  Because I'm constantly need to check the hashed_key
+# value to see whether the node is actually responsible for the data
+# or not, I'm having to constantly recompute the hash.  Doing it once
+# and storing it would be faster.
+
 class Node(MutableMapping) :
 
   def __init__(self, id=None, nfingers=None, metric=None) :
