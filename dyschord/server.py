@@ -61,6 +61,15 @@ class DyschordService(core.DistributedHash) :
   def _serialize_node_descr(self, node) :
     return {"id": node.id, "url": getattr(node, "url", self.url)}
 
+  def _node_from_descr(self, descr) :
+    # Translate node descriptions into either proxy nodes, or
+    # references to the wrapped node.
+    proxy = NodeProxy.from_descr(descr)
+    if proxy.id == self.node.id :
+      return self.node
+    else :
+      return proxy
+
   def find_successor(self, key_hash) :
     rslt = core.find_node(self.node, key_hash)
     return self._serialize_node_descr(rslt)
@@ -78,7 +87,7 @@ class DyschordService(core.DistributedHash) :
     return self._serialize_node_descr(rslt)
 
   def prepend_node(self, node_descr) :
-    node_proxy = NodeProxy.from_descr(node_descr)
+    node_proxy = self._node_from_descr(node_descr)
     self.logger.debug("Trying to prepend node %d", node_proxy.id)
     return self.node.prepend_node(node_proxy)
 
@@ -86,17 +95,27 @@ class DyschordService(core.DistributedHash) :
     self.logger.debug(
       "Setup called with predecessor %s, fingers %s, and data %s",
       predecessor, fingers, data)
-    return self.node.setup(NodeProxy.from_descr(predecessor),
-                           [NodeProxy.from_descr(finger) for finger in fingers],
-                           data)
+    return self.node.setup(
+      self._node_from_descr(predecessor),
+      dict((int(step), self._node_from_descr(finger))
+           for step, finger in fingers.iteritems()),
+      data)
 
   def get_fingers(self) :
     # Note keys of dictionaries passed through XML-RPC must be strings
     finger_dict = dict(
       (str(step), self._serialize_node_descr(finger))
-       for step, finger in zip(self.node.finger_steps, self.node.fingers))
+       for step, finger in self.node.get_fingers().iteritems())
     return finger_dict
 
+  def successor_leaving(self, new_successor) :
+    self.node.successor_leaving(self._node_from_descr(new_successor))
+
+  def predecessor_leaving(self, new_predecessor, data) :
+    self.node.predecessor_leaving(self._node_from_descr(new_predecessor), data)
+
+  def leave() :
+    self.node.leave()
 
 
 def start_in_thread(server) :
@@ -167,6 +186,7 @@ def start(port, node=None, cloud_addrs=[], forever=True) :
     print "Exiting"
   finally :
     if forever :
+      service.node.leave()
       server.shutdown()
       if server_thread is not None :
         server_thread.join()

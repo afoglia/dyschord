@@ -238,6 +238,9 @@ class Node(MutableMapping) :
     # Default ping method
     return {"id": str(self.id)}
 
+  def get_fingers(self) :
+    return dict(zip(self.finger_steps, self.fingers))
+
   def repair_fingers(self) :
     self.logger.info("Repairing fingers")
     furthest_known = self
@@ -348,7 +351,8 @@ class Node(MutableMapping) :
               < self.distance(self.hash_key(k), successor.id)) :
             delegated_data[k] = v
         self.logger.debug("Sending data: %s", delegated_data)
-        newnode.setup(predecessor, list(predecessor.fingers), delegated_data)
+        newnode.setup(predecessor, dict(predecessor.get_fingers()),
+                      delegated_data)
 
         # Establish new fingers to bring the new node into chain
         predecessor.fingers[0] = newnode
@@ -365,14 +369,40 @@ class Node(MutableMapping) :
       self.predecessor = predecessor
       self.logger.debug("Setting up node with initial fingers: %s",
                         [(finger.id, getattr(finger, "url", None))
-                         for finger in fingers])
-      self.fingers = fingers
+                         for finger in fingers.values()])
+      self.fingers = fingers.values()
     with self.data_lock.wrlocked() :
       self.logger.debug("Setting up node with data: %s", data)
       self.data.update(data)
     self.initialized = True
 
 
+  def predecessor_leaving(self, new_predecessor, data) :
+    with self.data_lock.wrlocked() :
+      with self.finger_lock.wrlocked() :
+        self.logger.info("Predecessor %d shutting down", self.predecessor.id)
+        self.logger.debug("Taking over data: %s", data)
+        self.data.update(data)
+        self.predecessor = new_predecessor
+
+  def successor_leaving(self, new_successor) :
+    with self.finger_lock.wrlocked() :
+      old_successor = self.fingers[0]
+      for i, finger in enumerate(self.fingers) :
+        if finger.id == old_successor.id :
+          self.fingers[i] = new_successor
+
+  def leave(self) :
+    with self.data_lock.wrlocked() :
+      with self.finger_lock.rdlocked() :
+        self.logger.info("Disconnecting from peers")
+        successor = self.next
+        if successor.id != self.id :
+          self.logger.debug("Sending data: %s", self.data)
+          successor.predecessor_leaving(self.predecessor, self.data)
+        # This will throw...  Need to add a setter.
+        if self.predecessor.id != self.id :
+          self.predecessor.successor_leaving(successor)
 
 def walk(start) :
   seen = set()

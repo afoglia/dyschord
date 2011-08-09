@@ -111,15 +111,27 @@ class NodeProxy(object) :
     return self.server.prepend_node(self.proxy_to_node_descr(node, url))
 
   def setup(self, predecessor, fingers, data) :
-    self.server.setup(self.proxy_to_node_descr(predecessor),
-                      [self.proxy_to_node_descr(finger) for finger in fingers],
-                      data)
+    self.server.setup(
+      self.proxy_to_node_descr(predecessor),
+      dict((str(step), self.proxy_to_node_descr(finger))
+           for step, finger in fingers.iteritems()),
+      data)
 
   def get_fingers(self) :
     fingers = self.server.get_fingers()
     fingers = dict((int(step), NodeProxy.from_descr(descr))
                    for step, descr in fingers.iteritems())
     return fingers
+
+  def successor_leaving(self, new_successor) :
+    self.server.successor_leaving(self.proxy_to_node_descr(new_successor))
+
+  def predecessor_leaving(self, new_predecessor,data) :
+    self.server.predecessor_leaving(
+      self.proxy_to_node_descr(new_predecessor), data)
+
+  def leave(self) :
+    return self.server.leave()
 
 
 # Non-peer client
