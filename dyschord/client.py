@@ -180,6 +180,10 @@ class Client(object) :
 
 
   def lookup(self, key) :
+    """Lookup value for key
+
+    parameters:
+      - key       string"""
     # Note: keys are str not basestring, to avoid worrying about unicode issues
     if not isinstance(key, str) :
       raise Exception("Unable to handle nonstring key %s" % key)
@@ -196,6 +200,11 @@ class Client(object) :
       raise Exception("Unable to connect to any nodes")
 
   def store(self, key, value) :
+    """Store value for key
+
+    parameters:
+      - key       string
+      - value     a json-encodable object"""
     if not isinstance(key, str) :
       raise Exception("Unable to handle nonstring key %s" % key)
     self._find_connections()
