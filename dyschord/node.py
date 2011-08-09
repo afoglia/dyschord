@@ -431,6 +431,12 @@ def announce(new_node) :
     node.update_fingers_on_insert(new_node)
 
 
+
+# DistributedHash
+#
+# Simple client for a collection of Nodes, all in the same process.
+# This was designed to quickly test the algorithms used in Node in the
+# unittests.
 class DistributedHash(object) :
   def __init__(self, start=None) :
     # Start points to the "beginning" of the list
