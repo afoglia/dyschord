@@ -5,13 +5,110 @@ import unittest
 import dyschord
 
 
+
+
+# DistributedHash
+#
+# Simple client for a collection of Nodes, all in the same process.
+# This was designed to quickly test the algorithms used in Node in the
+# unittests.
+class DistributedHash(object) :
+  def __init__(self, start=None) :
+    # Start points to the "beginning" of the list
+    self.__start = None
+    if start is not None :
+      self.join(start)
+
+  def lookup(self, key) :
+    # Can't just use hash because that might differ between Python
+    # implementations.  Plus by using a different hash function, we
+    # reduce the changes of collisions in the dictionaries in each node
+    # assuming the algorithms are sufficiently different.  And Python's
+    # hashing algorithm is relatively simple, so that's probably the
+    # case.
+    key_hash = self.__start.hash_key(key)
+    node = dyschord.find_node(self.__start, key_hash)
+    return node.data[key]
+
+  def store(self, key, value) :
+    key_hash = self.__start.hash_key(key)
+    node = dyschord.find_node(self.__start, key_hash)
+    node[key] = value
+
+
+  def delete(self, key) :
+    key_hash = self.__start.hash_key(key)
+    node = dyschord.find_node(self.__start, key_hash)
+    del node[key]
+
+  def _iternodes(self, start=None) :
+    if self.__start is None :
+      return []
+    return dyschord.walk(self.__start)
+
+  def iterkeys(self) :
+    for node in self._iternodes() :
+      for k in node.iterkeys() :
+        yield k
+
+  def __len__(self) :
+    return sum(len(node) for node in self._iternodes())
+
+  def clear(self) :
+    for node in self._iternodes() :
+      node.clear()
+
+  def num_nodes(self) :
+    return len(list(self._iternodes()))
+
+  def join(self, newnode) :
+    # Base case: First node
+    if self.__start is None :
+      self.__start = newnode
+      self.__start.fingers = [newnode]*len(self.__start.fingers)
+      self.__start.initialized = True
+      return
+
+    predecessor = dyschord.find_predecessor(self.__start, newnode.id)
+    successor = predecessor.next
+    if successor.id == newnode.id :
+      raise Exception("Node already exists with same id")
+    successor.prepend_node(newnode)
+
+    # Optimize fingers.  Don't need to lock the nodes while this is
+    # being done.
+    newnode.update_fingers()
+    dyschord.announce(newnode)
+
+
+  def leave(self, node) :
+    if self.num_nodes() == 0 :
+      return
+
+    # Note I am looking up, because then I can get a node to leave by
+    # passing in another instance with the same id.  Might be useful
+    # for testing.
+    predecessor = dyschord.find_predecessor(self.__start, node.id)
+    # print "Leaving node %d has predecessor %d" % (node.id, predecessor.id)
+    if predecessor.next.id != node.id :
+      # No joined node with this id.  Maybe log the missing node, but
+      # work is done
+      return
+    
+    leaving = predecessor.next
+    # Check we aren't removing first item
+    if leaving.id == self.__start.id :
+      self.__start = leaving.next
+    leaving.leave()
+
+
 # Simple DistributedHash builder for testing
 def construct_dh(size, Node=dyschord.Node) :
   nodes = {}
   while len(nodes) != size :
     new_node = Node()
     nodes[new_node.id] = new_node
-  rslt = dyschord.DistributedHash()
+  rslt = DistributedHash()
   for n in nodes.itervalues() :
     rslt.join(n)
   return rslt
@@ -65,7 +162,7 @@ class InitializationLockTest(unittest.TestCase) :
 
   def testInitialized(self) :
     node = self.nodes.values()[0]
-    dh = dyschord.DistributedHash(node)
+    dh = DistributedHash(node)
     self.assertEquals(len(node), 0)
 
 
@@ -77,21 +174,21 @@ class JoinTest(unittest.TestCase) :
     self.nodes = dict((i, self.Node(i)) for i in (0, 3, 8))
 
   def testJoinEmpty(self) :
-    dh = dyschord.DistributedHash()
+    dh = DistributedHash()
     self.assertEquals(dh.num_nodes(), 0)
     for i, node in enumerate(self.nodes.itervalues()) :
       dh.join(node)
       self.assertEquals(dh.num_nodes(), i+1)
 
   def testJoinDuplicateId(self) :
-    dh = dyschord.DistributedHash()
+    dh = DistributedHash()
     for i, node in enumerate(self.nodes.itervalues()) :
       dh.join(node)
     new_node = self.Node(id=self.nodes.values()[0].id)
     self.assertRaises(Exception, dh.join, new_node)
 
   def testJoinWithData(self) :
-    dh = dyschord.DistributedHash()
+    dh = DistributedHash()
     for node in self.nodes.itervalues() :
       dh.join(node)
     dh.store("1", "one")
@@ -103,7 +200,7 @@ class JoinTest(unittest.TestCase) :
       self.assertEquals(len(node), 0 if k!=3 else 1)
 
   def testJoinWithDataMove(self) :
-    dh = dyschord.DistributedHash()
+    dh = DistributedHash()
     for node in self.nodes.itervalues() :
       dh.join(node)
     dh.store("1", "one")
@@ -115,7 +212,7 @@ class JoinTest(unittest.TestCase) :
       self.assertEquals(len(node), 0 if k!=2 else 1)
 
   def testJoinWithDataMoveMatchNewId(self) :
-    dh = dyschord.DistributedHash()
+    dh = DistributedHash()
     for node in self.nodes.itervalues() :
       dh.join(node)
     dh.store("1", "one")
@@ -132,7 +229,7 @@ class LeaveTest(unittest.TestCase) :
     self.metric = dyschord.TrivialMetric(4)
     self.Node = lambda i=None : dyschord.Node(i, nfingers=1, metric=self.metric)
     self.nodes = dict((i, self.Node(i)) for i in (0, 3, 8))
-    self.distributed_hash = dyschord.DistributedHash()
+    self.distributed_hash = DistributedHash()
     for node in self.nodes.itervalues() :
       self.distributed_hash.join(node)
 
@@ -206,7 +303,7 @@ class SimpleTest(unittest.TestCase) :
     self.assertRaises(KeyError, self.distributed_hash.lookup, 0)
 
   def testJoinPreExisting(self) :
-    distributed_hash = dyschord.DistributedHash()
+    distributed_hash = DistributedHash()
     n = self.Node(1)
     distributed_hash.join(n)
     self.assertRaises(Exception, distributed_hash.join, n)
@@ -241,7 +338,7 @@ class WordsTest(unittest.TestCase) :
   # data.
       
   def testLeaveNoncontained(self) :
-    self.assertEquals(dyschord.DistributedHash().leave(dyschord.Node()), None)
+    self.assertEquals(DistributedHash().leave(dyschord.Node()), None)
 
   def testLeaveNonfirst(self) :
     size = 10
