@@ -515,25 +515,7 @@ class DistributedHash(object) :
       return
     
     leaving = predecessor.next
-    successor = leaving.next
-
     # Check we aren't removing first item
     if leaving.id == self.__start.id :
-      self.__start = successor
-
-    # Copy data from leaving node
-    successor.update(leaving)
-
-    # Can update this by not call update fingers on all nodes, but
-    # only on those that had the leaving node.  In fact, I don't think
-    # I need to update the fingers at all, other than replacing all
-    # fingers to the leaving to the sucessor.
-    for remaining_node in self._iternodes() :
-      if remaining_node is not leaving :
-        remaining_node.fingers = [
-          finger if finger.id != leaving.id else successor
-          for finger in remaining_node.fingers]
-
-    successor.predecessor = predecessor
-    for remaining_node in self._iternodes() :
-      remaining_node.update_fingers()
+      self.__start = leaving.next
+    leaving.leave()
