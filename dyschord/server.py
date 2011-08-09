@@ -21,10 +21,9 @@ class ThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer) :
   """Threading XML-RPC Server"""
 
 # Eventually, I hope to derive from the Node class itself
-class DyschordService(core.DistributedHash) :
+class DyschordService(object) :
   def __init__(self, mynode) :
     self.node = mynode
-    core.DistributedHash.__init__(self, self.node)
     self.url = None
     self.logger = logging.getLogger("dyschord.service")
 
