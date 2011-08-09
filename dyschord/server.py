@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from SimpleXMLRPCServer import SimpleXMLRPCServer
+from SimpleXMLRPCServer import SimpleXMLRPCServer, Fault
 from SocketServer import ThreadingMixIn
 from xmlrpclib import Binary
 import datetime
@@ -43,6 +43,12 @@ class DyschordService(core.DistributedHash) :
         if (self.node.distance(key_hash, self.node.id)
             <= self.node.distance(key_hash, self.node.predecessor.id)) :
           return self.node[key]
+      except (socket.error, socket.timeout) :
+        self.node.repair_fingers()
+        self.node.repair_predecessor()
+      except KeyError, e :
+        raise Fault(404, e.message)
+      try :
         target_node = core.find_node(self.node, key_hash)
       except (socket.error, socket.timeout) :
         self.node.repair_fingers()

@@ -190,11 +190,16 @@ class Client(object) :
     self._find_connections()
     for peer_id, peer in self.cloud.items() :
       try :
-        return json.loads(peer.lookup(key))
+        rslt = peer.lookup(key)
       except (socket.error, socket.timeout) :
         # Error connecting to node
         del self.cloud[peer_id]
         continue
+      except xmlrpclib.Fault, e :
+        if e.faultCode == 404 :
+          raise KeyError(e.faultString)
+      else :
+        return json.loads(rslt)
       break
     if not self.cloud :
       raise Exception("Unable to connect to any nodes")
