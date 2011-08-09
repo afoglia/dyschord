@@ -1,6 +1,7 @@
 import xmlrpclib
 import socket
 import logging
+import json
 
 # Timeout XML-RPC ServerProxy code.
 #
@@ -185,7 +186,7 @@ class Client(object) :
     self._find_connections()
     for peer_id, peer in self.cloud.items() :
       try :
-        return peer.lookup(key)
+        return json.loads(peer.lookup(key))
       except (socket.error, socket.timeout) :
         # Error connecting to node
         del self.cloud[peer_id]
@@ -200,7 +201,7 @@ class Client(object) :
     self._find_connections()
     for peer_id, peer in self.cloud.items() :
       try :
-        peer.store(key, value)
+        peer.store(key, json.dumps(value))
       except (socket.error, socket.timeout) :
         # Error connecting to node
         del self.cloud[peer_id]
