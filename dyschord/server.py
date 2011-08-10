@@ -69,16 +69,12 @@ class DyschordService(object) :
                                   self._node_from_descr(predecessor))
 
   def _serialize_node_descr(self, node) :
-    return {"id": node.id, "url": getattr(node, "url", self.url)}
+    return NodeProxy.to_descr(node)
 
   def _node_from_descr(self, descr) :
     # Translate node descriptions into either proxy nodes, or
     # references to the wrapped node.
-    proxy = NodeProxy.from_descr(descr)
-    if proxy.id == self.node.id :
-      return self.node
-    else :
-      return proxy
+    return NodeProxy.from_descr(descr)
 
   def find_successor(self, key_hash) :
     rslt = core.find_node(self.node, key_hash)
@@ -102,7 +98,8 @@ class DyschordService(object) :
   def prepend_node(self, node_descr) :
     node_proxy = self._node_from_descr(node_descr)
     self.logger.debug("Trying to prepend node %d", node_proxy.id)
-    return self.node.prepend_node(node_proxy)
+    self.node.prepend_node(node_proxy)
+    self.logger.debug("Successfully prepended node")
 
   def setup(self, predecessor, fingers, data) :
     self.logger.debug(
@@ -141,21 +138,23 @@ def start_in_thread(server) :
   
   
 def start(port, node=None, cloud_addrs=[], forever=True) :
+  if node is None :
+    node = core.Node()
+  service = DyschordService(node)
+  service.url = "http://localhost:%d" % port
+  service.node.url = service.url
+  NodeProxy.node_translator.url = service.url
+  NodeProxy.node_translator.local_nodes[node.id] = node
+
   # I don't know what the "localhost" part of the server address is
   # for.  It looks like it's used to bind the socket, so it should
   # always be localhost.  (Unless it can be used to bind to just
-  # interface of a system with multiple ip addresses?)
-  if node is None :
-    node = core.Node()
+  # one network interface of a system with multiple ip addresses?)
   server = ThreadedXMLRPCServer(("localhost", port),
                                 logRequests=True,
                                 allow_none=True)
   server.register_introspection_functions()
   server.register_multicall_functions()
-
-  service = DyschordService(node)
-  service.url = "http://localhost:%d" % port
-  service.node.url = service.url
   server.register_instance(service)
 
   server_thread = None

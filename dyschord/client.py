@@ -36,6 +36,36 @@ class TimeoutServerProxy(xmlrpclib.ServerProxy):
     xmlrpclib.ServerProxy.__init__(self,uri,*l,**kw)
 
 
+# Node description functions
+#
+# Instead of sending the full objects, when we need to send node info
+# (i.e. for pointing to the next item in the chain), we'll pass a
+# description instead
+class ProxyTranslation(object) :
+  def __init__(self, url='') :
+    # Default url to use
+    self.url = url
+    self.local_nodes = {}
+
+  def to_descr(self, node) :
+    return {"id": node.id, "url": getattr(node, "url", self.url)}
+
+  def from_descr(self, descr) :
+    try :
+      node_id = descr["id"]
+    except KeyError :
+      proxy = NodeProxy(url=descr["url"], id=descr.get("id"))
+      node_id = proxy.id
+    else :
+      proxy = None
+    try :
+      return self.local_nodes[node_id]
+    except KeyError :
+      if proxy is not None :
+        return proxy
+      else :
+        return NodeProxy(url=descr["url"], id=node_id)
+
 
 
 # NodeProxy object
@@ -46,25 +76,24 @@ class TimeoutServerProxy(xmlrpclib.ServerProxy):
 #
 # Closing the connection doesn't seem to work though.
 class NodeProxy(object) :
-  
-  # Node description functions
-  #
-  # Instead of sending the full objects, when we need to send node info
-  # (i.e. for pointing to the next item in the chain), we'll pass a
-  # description instead
 
-  @staticmethod
-  def proxy_to_node_descr(node, url=None) :
-    if not url :
-      url = node.url
-    return {"id": node.id, "url": url}
+  # Class-level object to handle the translation between nodes
+  # descriptions and actual nodes.  Class-level, so that the server
+  # object can configure it to not return proxies for the node it's
+  # serving.
+  node_translator = ProxyTranslation()
+
+  # Class level methods.  Left as remnant of code pre-refactoring.
+  @classmethod
+  def to_descr(cls, node) :
+    return cls.node_translator.to_descr(node)
 
   @classmethod
   def from_descr(cls, descr) :
-    return cls(url=descr["url"], id=descr.get("id"))
+    return cls.node_translator.from_descr(descr)
 
 
-  def __init__(self, url, id=None, timeout=2, verbose=True) :
+  def __init__(self, url, id=None, timeout=5, verbose=True) :
     # Should parse the URL to makes sure it's http, or if not, add the protocol
     self.url = url
     self.server = TimeoutServerProxy(url, timeout=timeout, verbose=verbose,
@@ -88,10 +117,10 @@ class NodeProxy(object) :
 
   def get_next(self) :
     next = self.server.get_next()
-    return NodeProxy(next["url"], id=next.get("id"))
+    return self.node_translator.from_descr(next)
 
   def set_next(self, value) :
-    self.server.set_next(self.proxy_to_node_descr(value))
+    self.server.set_next(self.node_translator.to_descr(value))
 
   next = property(get_next, set_next, doc="Successor node")
   
@@ -99,7 +128,7 @@ class NodeProxy(object) :
   @property
   def predecessor(self) :
     predecessor = self.server.get_predecessor()
-    return NodeProxy(predecessor["url"], id=predecessor.get("id"))
+    return self.node_translator.from_descr(predecessor)
 
   def close(self) :
     self.server("close")()
@@ -107,12 +136,12 @@ class NodeProxy(object) :
 
   def store_backup(self, key, value, predecessor) :
     return self.server.store_backup(key, value,
-                                    self.proxy_to_node_descr(predecessor))
+                                    self.node_translator.to_descr(predecessor))
 
   def find_node(self, key_hash) :
     node_info = self.server.find_node(key_hash)
     self.logger.debug("Making new proxy for %s", node_info)
-    return NodeProxy.from_descr(node_info)
+    return self.node_translator.from_descr(node_info)
 
   def __getattr__(self, attr) :
     # Maybe it's a method on the server...
@@ -121,32 +150,30 @@ class NodeProxy(object) :
   def closest_preceding_node(self, key_hash) :
     node_info = self.server.closest_preceding_node(key_hash)
     self.logger.debug("Closest node to %d is %s", key_hash, node_info)
-    if node_info["url"] == self.url :
-      return self
-    return NodeProxy.from_descr(node_info)
+    return self.node_translator.from_descr(node_info)
 
   def prepend_node(self, node, url=None) :
-    return self.server.prepend_node(self.proxy_to_node_descr(node, url))
+    return self.server.prepend_node(self.node_translator.to_descr(node))
 
   def setup(self, predecessor, fingers, data) :
     self.server.setup(
-      self.proxy_to_node_descr(predecessor),
-      dict((str(step), self.proxy_to_node_descr(finger))
+      self.node_translator.to_descr(predecessor),
+      dict((str(step), self.node_translator.to_descr(finger))
            for step, finger in fingers.iteritems()),
       data)
 
   def get_fingers(self) :
     fingers = self.server.get_fingers()
-    fingers = dict((int(step), NodeProxy.from_descr(descr))
+    fingers = dict((int(step), self.node_translator.from_descr(descr))
                    for step, descr in fingers.iteritems())
     return fingers
 
   def successor_leaving(self, new_successor) :
-    self.server.successor_leaving(self.proxy_to_node_descr(new_successor))
+    self.server.successor_leaving(self.node_translator.to_descr(new_successor))
 
   def predecessor_leaving(self, new_predecessor,data) :
     self.server.predecessor_leaving(
-      self.proxy_to_node_descr(new_predecessor), data)
+      self.node_translator.to_descr(new_predecessor), data)
 
   def leave(self) :
     return self.server.leave()
