@@ -451,7 +451,7 @@ class Node(MutableMapping) :
       self.logger.debug("Setting up node with initial fingers: %s",
                         [(finger.id, getattr(finger, "url", None))
                          for finger in fingers.values()])
-      self.fingers = fingers.values()
+      self.fingers = [fingers[step] for step in self.finger_steps]
     with self.data_lock.wrlocked() :
       self.logger.debug("Setting up node with data: %s", data)
       self.data.update(data)
