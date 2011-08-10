@@ -82,7 +82,7 @@ class NodeProxy(object) :
 
   def __repr__(self) :
     # Should add timeout and verbose arguments, but this is good enough for now
-    rslt = "NodeProxy(%s, id=%d)" % (self.url, self.id)
+    rslt = 'NodeProxy("%s", id=%d)' % (self.url, self.id)
     return rslt
 
 
