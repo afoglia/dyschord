@@ -227,9 +227,9 @@ def main(args=sys.argv) :
   if options.log_config :
     logging.config.fileConfig(options.log_config)
 
-  if options.port :
+  if options.port is not None :
     config["port"] = options.port
-  if options.id :
+  if options.id is not None :
     config["node_id"] = options.id
 
   metric_name = config.get("metric")
