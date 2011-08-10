@@ -80,10 +80,21 @@ class NodeProxy(object) :
       self.__id = int(ping["id"])
     return self.__id
 
-  @property
-  def next(self) :
+  def __repr__(self) :
+    # Should add timeout and verbose arguments, but this is good enough for now
+    rslt = "NodeProxy(%s, id=%d)" % (self.url, self.id)
+    return rslt
+
+
+  def get_next(self) :
     next = self.server.get_next()
     return NodeProxy(next["url"], id=next.get("id"))
+
+  def set_next(self, value) :
+    self.server.set_next(self.proxy_to_node_descr(value))
+
+  next = property(get_next, set_next, doc="Successor node")
+  
 
   @property
   def predecessor(self) :

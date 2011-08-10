@@ -92,6 +92,9 @@ class DyschordService(object) :
     rslt = self.node.next
     return self._serialize_node_descr(rslt)
 
+  def set_next(self, value) :
+    self.node.next = NodeProxy.from_descr(value)
+
   def get_predecessor(self) :
     rslt = self.node.predecessor
     return self._serialize_node_descr(rslt)

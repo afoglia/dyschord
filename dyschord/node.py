@@ -169,9 +169,13 @@ class Node(MutableMapping) :
   def hash_key(self) :
     return self.__metric.hash_key
 
-  @property
-  def next(self) :
+  def get_next(self) :
     return self.fingers[0]
+
+  def set_next(self, value) :
+    self.fingers[0] = value
+
+  next = property(get_next, set_next, doc="Successor node")
 
   @property
   def id(self) :
@@ -422,7 +426,9 @@ class Node(MutableMapping) :
                       delegated_data)
 
         # Establish new fingers to bring the new node into chain
-        predecessor.fingers[0] = newnode
+        self.logger.debug("Setting successor of predecessor to the new node")
+        predecessor.next = newnode
+        self.logger.debug("Setting my predecessor to new node")
         self.predecessor = newnode
 
         for k in delegated_data :
@@ -448,6 +454,7 @@ class Node(MutableMapping) :
     with self.data_lock.wrlocked() :
       with self.finger_lock.wrlocked() :
         self.logger.info("Predecessor %d shutting down", self.predecessor.id)
+        self.logger.debug("New predecessor %d", new_predecessor.id)
         self.logger.debug("Taking over data: %s", data)
         self.data.update(data)
         self.predecessor = new_predecessor
