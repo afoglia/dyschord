@@ -133,6 +133,14 @@ class NodeProxy(object) :
   def close(self) :
     self.server("close")()
 
+  def ping(self) :
+    return self.server.ping()
+
+  def lookup(self, key) :
+    return self.server.lookup(key)
+
+  def store(self, key, value) :
+    return self.server.store(key, value)
 
   def store_backup(self, key, value, predecessor) :
     return self.server.store_backup(key, value,
@@ -142,10 +150,6 @@ class NodeProxy(object) :
     node_info = self.server.find_node(key_hash)
     self.logger.debug("Making new proxy for %s", node_info)
     return self.node_translator.from_descr(node_info)
-
-  def __getattr__(self, attr) :
-    # Maybe it's a method on the server...
-    return getattr(self.server, attr)
 
   def closest_preceding_node(self, key_hash) :
     node_info = self.server.closest_preceding_node(key_hash)
