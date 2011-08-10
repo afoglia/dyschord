@@ -191,6 +191,7 @@ def start(port, node=None, cloud_addrs=[], forever=True) :
       print "Unable to find other nodes to join"
 
     # All initialized
+    service.logger.info("Successfully setup node")
     service.node.initialized = True
     while forever :
       time.sleep(10)
