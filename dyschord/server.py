@@ -108,11 +108,12 @@ class DyschordService(object) :
     self.logger.debug(
       "Setup called with predecessor %s, fingers %s, and data %s",
       predecessor, fingers, data)
-    return self.node.setup(
+    self.node.setup(
       self._node_from_descr(predecessor),
       dict((int(step), self._node_from_descr(finger))
            for step, finger in fingers.iteritems()),
       data)
+    self.logger.debug("Successfully setup node")
 
   def get_fingers(self) :
     # Note keys of dictionaries passed through XML-RPC must be strings
@@ -128,6 +129,7 @@ class DyschordService(object) :
     self.node.predecessor_leaving(self._node_from_descr(new_predecessor), data)
 
   def leave() :
+    self.logger.info("Shutting down")
     self.node.leave()
 
 
