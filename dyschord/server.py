@@ -95,6 +95,11 @@ class DyschordService(object) :
     rslt = self.node.predecessor
     return self._serialize_node_descr(rslt)
 
+  def update_fingers_on_insert(self, node) :
+    self.logger.debug("Received request to update fingers for new node %s",
+                      node.get("id"))
+    return self.node.update_fingers_on_insert(NodeProxy.from_descr(node))
+
   def prepend_node(self, node_descr) :
     node_proxy = self._node_from_descr(node_descr)
     self.logger.debug("Trying to prepend node %d", node_proxy.id)

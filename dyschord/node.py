@@ -370,28 +370,57 @@ class Node(MutableMapping) :
                                           % 2**self.__metric.hash_bits))
 
   def update_fingers_on_insert(self, newnode) :
+    # Faster updating when new node is added.
+    #
+    # When a new node is added, we don't need to check all the fingers
+    # for changes.  Only a handful in a small range will.  This
+    # function limits traversing other nodes to only those fingers
+    # that will have changed.
+    self.logger.debug("Updating fingers on node %d for new node %d",
+                      self.id, newnode.id)
+
+    if newnode.id == self.id :
+      self.logger.debug("New node is self, so updating all fingers")
+      return self.update_fingers()
+
     with self.finger_lock.wrlocked() :
-      # Faster updating when new node is added.
-      self.logger.debug("Updating fingers on node %d for new node %d",
-                        self.id, newnode.id)
+      last_changed = None
+
       for i, step in enumerate(self.finger_steps) :
         old_finger = self.fingers[i]
+
         if old_finger.id == self.id and not old_finger is self :
           self.logger.warn("Somehow have a finger to a proxy of myself!")
           self.fingers[i] = self
           old_finger = self
+
         if old_finger.id == newnode.id :
           # Already registered.  Probably set to next during joining
           continue
+
+        # Current finger points before new node.  Finger won't change.
         if (old_finger.id != self.id
             and (self.distance(self.id, old_finger.id)
                  < self.distance(self.id, newnode.id))) :
           continue
+
+        # We are at a finger currently pointing beyond the new node.
+        # Check to see if it needs to be changed.
+
+        if last_changed is not None and old_finger.id != last_changed.id :
+          # Adding a new node can only change fingers that point to at
+          # most one distinct node.
+          break
+
         self.logger.log(5, "Updating finger %d pointing %d away", i, step)
         self.fingers[i] = find_node(old_finger, ((self.id+step)
                                                  % 2**self.__metric.hash_bits))
+        # Finger was not changed, hence all later fingers won't change either.
         if self.fingers[i].id == old_finger.id :
           break
+        else :
+          last_changed = old_finger
+
       self.logger.debug("End updating fingers for new node")
 
 
@@ -431,17 +460,18 @@ class Node(MutableMapping) :
         newnode.setup(predecessor, dict(predecessor.get_fingers()),
                       delegated_data)
 
-        # Establish new fingers to bring the new node into chain
-        self.logger.debug("Setting successor of predecessor to the new node")
-        predecessor.next = newnode
-        self.logger.debug("Setting my predecessor to new node")
-        self.predecessor = newnode
+      # Establish new fingers to bring the new node into chain
+      self.logger.debug("Setting successor of predecessor to the new node")
+      predecessor.next = newnode
+      self.logger.debug("Setting my predecessor to new node")
+      self.predecessor = newnode
 
-        self.update_fingers_on_insert(newnode)
+    announce(newnode)
 
-        for k in delegated_data :
-          # Need to check whether I should keep this as a backup...
-          del self.data[k]
+    with self.data_lock.wrlocked() :
+      for k in delegated_data :
+        # Need to check whether I should keep this as a backup...
+        del self.data[k]
 
 
   def setup(self, predecessor, fingers, data) :
@@ -480,6 +510,7 @@ class Node(MutableMapping) :
         self.logger.info("Disconnecting from peers")
         successor = self.next
         if successor.id != self.id :
+          self.logger.debug("Notifying successor: %d", successor.id)
           self.logger.debug("Sending data: %s", self.data)
           successor.predecessor_leaving(self.predecessor, self.data)
         # This will throw...  Need to add a setter.
@@ -507,7 +538,7 @@ def walk(start) :
 # (b) for each node, only fingers that are from 1 to (new_node._id
 # - node._id) need to change.
 def announce(new_node) :
-  for node in walk(new_node.next) :
-    if node.id == new_node.id :
-      break
+  logger = logging.getLogger("dyschord")
+  for node in walk(new_node) :
+    logger.info("Announcing new node %d to node %d", new_node.id, node.id)
     node.update_fingers_on_insert(new_node)

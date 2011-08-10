@@ -152,6 +152,11 @@ class NodeProxy(object) :
     self.logger.debug("Closest node to %d is %s", key_hash, node_info)
     return self.node_translator.from_descr(node_info)
 
+  def update_fingers_on_insert(self, node) :
+    self.logger.debug("Sending request to update fingers to node %d", node.id)
+    return self.server.update_fingers_on_insert(
+      self.node_translator.to_descr(node))
+
   def prepend_node(self, node, url=None) :
     return self.server.prepend_node(self.node_translator.to_descr(node))
 
