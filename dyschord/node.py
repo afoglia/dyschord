@@ -376,6 +376,10 @@ class Node(MutableMapping) :
                         self.id, newnode.id)
       for i, step in enumerate(self.finger_steps) :
         old_finger = self.fingers[i]
+        if old_finger.id == self.id and not old_finger is self :
+          self.logger.warn("Somehow have a finger to a proxy of myself!")
+          self.fingers[i] = self
+          old_finger = self
         if old_finger.id == newnode.id :
           # Already registered.  Probably set to next during joining
           continue
@@ -388,6 +392,8 @@ class Node(MutableMapping) :
                                                  % 2**self.__metric.hash_bits))
         if self.fingers[i].id == old_finger.id :
           break
+      self.logger.debug("End updating fingers for new node")
+
 
   @initialization_check
   def prepend_node(self, newnode) :
@@ -431,8 +437,10 @@ class Node(MutableMapping) :
         self.logger.debug("Setting my predecessor to new node")
         self.predecessor = newnode
 
+        self.update_fingers_on_insert(newnode)
+
         for k in delegated_data :
-          # Should move to a backup, should I have time to establish that.
+          # Need to check whether I should keep this as a backup...
           del self.data[k]
 
 
