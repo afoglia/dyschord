@@ -569,8 +569,9 @@ class Node(MutableMapping) :
     announce(newnode)
 
     # Now that we're all set up, we can delete the unneeded values.
-    # Do this in a thread so the caller is no longer
-    # blocked.
+    # Do this in a thread so the caller is no longer blocked.  (But
+    # since the caller is usually the main thread of the server
+    # script, it doesn't gain us that much.)
     janitor_thread = threading.Thread(target=self._data_cleanup,
                                       args=(to_delete,))
     janitor_thread.start()
@@ -670,13 +671,7 @@ def walk(start) :
       break
 
 
-# Update fingers of other nodes.
-#
-# (a) only nodes from new_node.id - max(finger_step) to predecessor
-# can possible have changes
-#
-# (b) for each node, only fingers that are from 1 to (new_node._id
-# - node._id) need to change.
+# Update fingers of other nodes for incoming node
 def announce(new_node) :
   logger = logging.getLogger("dyschord")
   for node in walk(new_node) :

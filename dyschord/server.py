@@ -22,8 +22,9 @@ from .client import NodeProxy
 class ThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer) :
   """Threading XML-RPC Server"""
 
-# Eventually, I hope to derive from the Node class itself
+
 class DyschordService(object) :
+  """DyschordService handles incoming XML-RPC calls and translates for a node"""
   def __init__(self, mynode) :
     self.node = mynode
     self.url = None
@@ -218,10 +219,6 @@ def start(port, node=None, cloud_addrs=[], heartbeat=10,
   NodeProxy.node_translator.url = service.url
   NodeProxy.node_translator.local_nodes[node.id] = node
 
-  # I don't know what the "localhost" part of the server address is
-  # for.  It looks like it's used to bind the socket, so it should
-  # always be localhost.  (Unless it can be used to bind to just
-  # one network interface of a system with multiple ip addresses?)
   server = ThreadedXMLRPCServer(("localhost", port),
                                 logRequests=log_requests,
                                 allow_none=True)
@@ -262,7 +259,8 @@ def start(port, node=None, cloud_addrs=[], heartbeat=10,
         successor.prepend_node(service.node)
       except (socket.timeout, socket.error) :
         # Node might have went down while trying to connect.  Try another.
-        print "Unable to connect to node %d @ %s" % (successor.id, successor.url)
+        print ("Unable to connect to node %d @ %s"
+               % (successor.id, successor.url))
         continue
       break
     

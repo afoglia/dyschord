@@ -127,19 +127,6 @@ def fill_with_words(dh, n) :
       break
   return i
 
-# Not needed any more, right now, but will probably be needed soon.
-
-# # Really this can be used for anything, but it's such a naive
-# # patching, for anything more complicated, I'd rather use a library
-# # developed by someone else.
-# def patch_dyschord(settings=dict(), module=dyschord) :
-#   orig_settings = {}
-#   for k, v in settings.iteritems() :
-#     orig_settings[k] = getattr(module, k)
-#     setattr(module, k, v)
-#   return orig_settings
-
-
 
 def dump_distributed_hash(dh) :
   for node in dh._iternodes() :
@@ -333,10 +320,6 @@ class WordsTest(unittest.TestCase) :
     for k, v in as_dict.iteritems() :
       self.assertEquals(self.distributed_hash.lookup(k), v)
 
-  # Need a test for adding a node with id just below the current
-  # lowest, to make sure that the code properly partitions all the
-  # data.
-      
   def testLeaveNoncontained(self) :
     self.assertEquals(DistributedHash().leave(dyschord.Node()), None)
 
