@@ -170,12 +170,21 @@ class Node(MutableMapping) :
     return self.__metric.hash_key
 
   def get_next(self) :
-    return self.fingers[0]
+    # Need to lock this in case it gets hit while prepending a new node
+    with self.finger_lock.rdlocked() :
+      return self.fingers[0]
 
   def set_next(self, value) :
+    old_next = self.fingers[0]
     self.fingers[0] = value
+    with self.finger_lock.wrlocked() :
+      for i, finger in enumerate(self.fingers) :
+        if (self.distance(self.id, finger.id)
+            < self.distance(self.id, value.id)) :
+          self.fingers[i] = value
 
   next = property(get_next, set_next, doc="Successor node")
+
 
   @property
   def id(self) :
@@ -490,10 +499,13 @@ class Node(MutableMapping) :
                       delegated_data)
 
       # Establish new fingers to bring the new node into chain
-      self.logger.debug("Setting successor of predecessor to the new node")
-      predecessor.next = newnode
       self.logger.debug("Setting my predecessor to new node")
       self.predecessor = newnode
+
+    # Needs to be done outside lock since the old predecessor will ask
+    # me for my fingers
+    self.logger.debug("Setting successor of predecessor to the new node")
+    predecessor.next = newnode
 
     announce(newnode)
 
@@ -542,7 +554,6 @@ class Node(MutableMapping) :
           self.logger.debug("Notifying successor: %d", successor.id)
           self.logger.debug("Sending data: %s", self.data)
           successor.predecessor_leaving(self.predecessor, self.data)
-        # This will throw...  Need to add a setter.
         if self.predecessor.id != self.id :
           self.predecessor.successor_leaving(successor)
 

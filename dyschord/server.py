@@ -141,22 +141,39 @@ class DyschordService(object) :
     self.node.leave()
 
 
-class SuccessorMonitor(threading.Thread) :
-  def __init__(self, node, frequency=1) :
+class PredecessorMonitor(threading.Thread) :
+  def __init__(self, node, frequency=10) :
     self.node = node
     self.frequency = frequency
     self.logger = logging.getLogger("dyschord.service.link_monitor")
+    self._stop_event = threading.Event()
+    # By using a Condition I can stop this thread even if it's
+    # sleeping.  Not necessary for here, but I wanted to see if this
+    # technique works, and it does.
+    self._wakeup = threading.Condition()
 
   def run(self) :
-    while True :
-      successor = self.node.next
-      try :
-        self.successor.ping()
-      except (socket.error, socket.timeout) :
-        self.logger.warn("Successor %d at %s non-responsive",
-                         successor.id, successor.url)
-        
-      time.sleep(self.frequency)
+    with self._wakeup :
+      while not self._stop_event.is_set() :
+        self.logger.debug("Checking predecessor")
+        predecessor = self.node.predecessor
+        try :
+          predecessor.ping()
+        except (socket.error, socket.timeout) :
+          self.logger.warn("Predecessor %d at %s non-responsive",
+                           predecessor.id, predecessor.url)
+          self.node.repair_predecessor()
+          new_pred = self.node.predecessor
+          self.logger.info(
+            "Replacing old precessor with new predecessor %d at %s",
+            new_pred.id, new_pred.url)
+          new_pred.successor_leaving(self.node)
+        self._wakeup.wait(self.frequency)
+
+  def stop(self) :
+    self._stop_event.set()
+    with self._wakeup :
+      self._wakeup.notify()
 
 
 def start_in_thread(server) :
@@ -213,7 +230,13 @@ def start(port, node=None, cloud_addrs=[], forever=True) :
         continue
 
       # What if this fails?  How could it fail?
-      successor.prepend_node(service.node, url=service.url)
+      try :
+        print "Connectiong to node %d at %s" % (successor.id, successor.url)
+        successor.prepend_node(service.node)
+      except (socket.timeout, socket.error) :
+        # Node might have went down while trying to connect.  Try another.
+        print "Unable to connect to node %d @ %s" % (successor.id, successor.url)
+        continue
       break
     
     else :
@@ -225,14 +248,16 @@ def start(port, node=None, cloud_addrs=[], forever=True) :
 
     # Kick off another thread to monitor the successor and make sure
     # that's always correct...
+    pred_monitor = PredecessorMonitor(service.node)
+    pred_monitor.run()
     while forever :
-      time.sleep(10)
-      pass
+      time.sleep(60)
   except KeyboardInterrupt :
     forever = True
     print "Exiting"
   finally :
     if forever :
+      pred_monitor.stop()
       service.node.leave()
       server.shutdown()
       if server_thread is not None :
