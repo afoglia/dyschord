@@ -81,7 +81,7 @@ class ProxyTranslation(object) :
 #
 # Closing the connection doesn't seem to work though.
 class NodeProxy(object) :
-  verbose = True
+  verbose = False
 
   # Class-level object to handle the translation between nodes
   # descriptions and actual nodes.  Class-level, so that the server
