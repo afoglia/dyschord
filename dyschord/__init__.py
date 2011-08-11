@@ -1,2 +1,2 @@
 from .node import *
-from .client import Client
+from .client import Client, ConnectionError

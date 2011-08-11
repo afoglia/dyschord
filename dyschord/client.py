@@ -2,6 +2,7 @@ import xmlrpclib
 import socket
 import logging
 import json
+import random
 
 # Timeout XML-RPC ServerProxy code.
 #
@@ -38,12 +39,16 @@ class TimeoutServerProxy(xmlrpclib.ServerProxy):
 
 # Node description functions
 #
-# Instead of sending the full objects, when we need to send node info
-# (i.e. for pointing to the next item in the chain), we'll pass a
-# description instead
+# Instead of sending full objects across the connections, when we need
+# to send node info (i.e. for pointing to the next item in the chain),
+# we'll pass a description instead.
 class ProxyTranslation(object) :
+
   def __init__(self, url='') :
-    # Default url to use
+    """Create a ProxyTranslation object
+
+    parameters
+    - url    URL to use for describing nodes in current process"""
     self.url = url
     self.local_nodes = {}
 
@@ -70,12 +75,13 @@ class ProxyTranslation(object) :
 
 # NodeProxy object
 #
-# Acts like a local node, but all calls are remote.  If a node goes
-# down, the connection will timeout, and a socket.timeout error will
-# be thrown.
+# Acts like a local node, but all calls are remote.  If a node
+# unexpectedly goes down, the connection will timeout, and a
+# socket.timeout error will be thrown.
 #
 # Closing the connection doesn't seem to work though.
 class NodeProxy(object) :
+  verbose = True
 
   # Class-level object to handle the translation between nodes
   # descriptions and actual nodes.  Class-level, so that the server
@@ -93,9 +99,11 @@ class NodeProxy(object) :
     return cls.node_translator.from_descr(descr)
 
 
-  def __init__(self, url, id=None, timeout=5, verbose=True) :
+  def __init__(self, url, id=None, timeout=5, verbose=None) :
     # Should parse the URL to makes sure it's http, or if not, add the protocol
     self.url = url
+    if verbose is None :
+      verbose = self.verbose
     self.server = TimeoutServerProxy(url, timeout=timeout, verbose=verbose,
                                      allow_none=True)
     self.__id = id
@@ -123,7 +131,7 @@ class NodeProxy(object) :
     self.server.set_next(self.node_translator.to_descr(value))
 
   next = property(get_next, set_next, doc="Successor node")
-  
+
 
   @property
   def predecessor(self) :
@@ -203,9 +211,18 @@ class NodeProxy(object) :
     return self.server.leave()
 
 
-# Non-peer client
+class ConnectionError(Exception) :
+  pass
+
 class Client(object) :
+  """Client to a cloud of dyschord nodes"""
   def __init__(self, peers, min_connections=3) :
+    """Create a client to a cloud of dyschord nodes
+
+    parameters
+    - peers                A list of urls of nodes to initiate
+                           the connections
+    - min_connections      Minimum number of connections to try to keep up"""
     self.logger = logging.getLogger("dyschord.client")
     self.cloud = {}
     for p in peers :
@@ -217,12 +234,14 @@ class Client(object) :
         continue
       self.cloud[p] = peer
     if not self.cloud :
-      raise Exception("Unable to connect to any nodes")
+      raise ConnectionError("Unable to connect to any nodes")
     self.min_connections = min_connections
     if len(self.cloud) < self.min_connections :
       self._find_connections()
 
   def _find_connections(self) :
+    # Try find more connections to bring number of connections back at
+    # or above minimum desired
     known_peers = list(self.cloud.values())
     while len(self.cloud) < self.min_connections and known_peers :
       peer = known_peers.pop(0)
@@ -236,35 +255,44 @@ class Client(object) :
           self.cloud[finger.url] = finger
           known_peers.append(finger)
     if not self.cloud :
-      raise Exception("Unable to connect to any peers")
+      raise ConnectionError("Unable to connect to any nodes")
     if len(self.cloud) < self.min_connections :
       self.logger.warn("Only aware of %d peers", len(self.cloud))
 
+  def _node_method(self, method) :
+    while self.cloud :
+      cloud = self.cloud.items()
+      random.shuffle(cloud)
+      for peer_id, peer in cloud :
+        try :
+          return method(peer)
+        except (socket.error, socket.timeout) :
+          # Error connecting to node
+          del self.cloud[peer_id]
+          continue
+    else :
+      raise ConnectionError("No nodes up")
 
   def lookup(self, key) :
     """Lookup value for key
 
     parameters:
-      - key       string"""
+      - key       string
+
+    Raises KeyError if not found"""
     # Note: keys are str not basestring, to avoid worrying about unicode issues
     if not isinstance(key, str) :
       raise Exception("Unable to handle nonstring key %s" % key)
     self._find_connections()
-    for peer_id, peer in self.cloud.items() :
-      try :
-        rslt = peer.lookup(key)
-      except (socket.error, socket.timeout) :
-        # Error connecting to node
-        del self.cloud[peer_id]
-        continue
-      except xmlrpclib.Fault, e :
-        if e.faultCode == 404 :
-          raise KeyError(e.faultString)
-      else :
-        return json.loads(rslt)
-      break
-    if not self.cloud :
-      raise Exception("Unable to connect to any nodes")
+
+    try :
+      rslt = self._node_method(lambda node : node.lookup(key))
+    except xmlrpclib.Fault, e :
+      if e.faultCode == 404 :
+        raise KeyError(e.faultString)
+      raise
+    else :
+      return json.loads(rslt)
 
   def store(self, key, value) :
     """Store value for key
@@ -275,13 +303,6 @@ class Client(object) :
     if not isinstance(key, str) :
       raise Exception("Unable to handle nonstring key %s" % key)
     self._find_connections()
-    for peer_id, peer in self.cloud.items() :
-      try :
-        peer.store(key, json.dumps(value))
-      except (socket.error, socket.timeout) :
-        # Error connecting to node
-        del self.cloud[peer_id]
-        continue
-      break
-    if not self.cloud :
-      raise Exception("Unable to connect to any nodes")
+
+    json_value = json.dumps(value)
+    self._node_method(lambda node : node.store(key, json_value))
