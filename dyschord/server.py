@@ -11,6 +11,8 @@ import socket
 import logging
 import logging.config
 import time
+import optparse
+
 
 from . import readwritelock
 from . import node as core
@@ -295,8 +297,6 @@ def start(port, node=None, cloud_addrs=[], heartbeat=10, forever=True) :
 
   return service, server_thread
 
-
-import optparse
 
 def main(args=sys.argv) :
   parser = optparse.OptionParser("%prog [OPTIONS] OTHER_NODES")
