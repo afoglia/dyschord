@@ -501,14 +501,14 @@ class Node(MutableMapping) :
 
     # Ensure the node is correct
     with self.finger_lock.wrlocked() :
-      predecessor = self.predecessor
-      if predecessor is None :
+      old_predecessor = self.predecessor
+      if old_predecessor is None :
         # Must be first joining...
-        predecessor = self
+        old_predecessor = self
       if self.id == newnode.id :
         raise Exception("Preexisting node with id")
       distance_to_newnode = self.distance(self.id, newnode.id)
-      distance_to_predecessor = self.distance(self.id, predecessor.id)
+      distance_to_predecessor = self.distance(self.id, old_predecessor.id)
       if distance_to_newnode < distance_to_predecessor :
         raise Exception("Nodes must be attached to their successor")
       if distance_to_newnode == distance_to_predecessor :
@@ -519,12 +519,18 @@ class Node(MutableMapping) :
       with self.data_lock.wrlocked() :
         # Setup new node
         delegated_data = {}
+        to_delete = set()
         for k, v in self.data.iteritems() :
-          if (self.distance(self.hash_key(k), newnode.id)
-              < self.distance(self.hash_key(k), self.id)) :
+          key_hash = self.hash_key(k)
+          if (self.distance(key_hash, newnode.id)
+              < self.distance(key_hash, self.id)) :
             delegated_data[k] = v
+            if (self.distance(key_hash, old_predecessor.id)
+                < self.distance(key_hash, new_node.id)) :
+              # Was storing it as a backup, but not needed anymore
+              to_delete.add(k)
         self.logger.debug("Sending data: %s", delegated_data)
-        newnode.setup(predecessor, dict(predecessor.get_fingers()),
+        newnode.setup(old_predecessor, dict(old_predecessor.get_fingers()),
                       delegated_data)
 
       # Establish new fingers to bring the new node into chain
@@ -534,13 +540,21 @@ class Node(MutableMapping) :
     # Needs to be done outside lock since the old predecessor will ask
     # me for my fingers
     self.logger.debug("Setting successor of predecessor to the new node")
-    predecessor.next = newnode
+    old_predecessor.next = newnode
 
     announce(newnode)
 
+    # Now that we're all set up, we can delete the unneeded values.
+    # Do this in a thread so the caller (the new node) is no longer
+    # blocked.
+    janitor_thread = threading.Thread(target=self._data_cleanup,
+                                      args=to_delete)
+    janitor_thread.start()
+
+
+  def _data_cleanup(self, keys) :
     with self.data_lock.wrlocked() :
-      for k in delegated_data :
-        # Need to check whether I should keep this as a backup...
+      for k in keys :
         del self.data[k]
 
 
