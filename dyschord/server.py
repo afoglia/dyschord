@@ -162,9 +162,9 @@ class DyschordService(object) :
 
 
 class PredecessorMonitor(threading.Thread) :
-  def __init__(self, node, frequency=10) :
+  def __init__(self, node, heartbeat=10) :
     self.node = node
-    self.frequency = frequency
+    self.frequency = heartbeat
     self.logger = logging.getLogger("dyschord.service.link_monitor")
     self._stop_event = threading.Event()
     # By using a Condition I can stop this thread even if it's
