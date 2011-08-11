@@ -208,7 +208,8 @@ def start_in_thread(server) :
 
   
   
-def start(port, node=None, cloud_addrs=[], heartbeat=10, forever=True) :
+def start(port, node=None, cloud_addrs=[], heartbeat=10,
+          log_requests=False, forever=True) :
   if node is None :
     node = core.Node()
   service = DyschordService(node)
@@ -222,7 +223,7 @@ def start(port, node=None, cloud_addrs=[], heartbeat=10, forever=True) :
   # always be localhost.  (Unless it can be used to bind to just
   # one network interface of a system with multiple ip addresses?)
   server = ThreadedXMLRPCServer(("localhost", port),
-                                logRequests=True,
+                                logRequests=log_requests,
                                 allow_none=True)
   server.register_introspection_functions()
   server.register_multicall_functions()
@@ -307,6 +308,12 @@ def main(args=sys.argv) :
                     help="Id value of node")
   parser.add_option("--log-config", dest="log_config",
                     help="Logging configuration ini file")
+  parser.add_option("--log-requests", dest="log_requests",
+                    action="store_true",
+                    help="Turn on request logging in the XML-RPC server")
+  parser.add_option("--proxy-verbose", dest="proxy_verbose",
+                    action="store_true",
+                    help="Verbose output from XML-RPC clients")
   options, args = parser.parse_args(args)
 
   try :
@@ -338,11 +345,20 @@ def main(args=sys.argv) :
   else :
     raise Exception('Unrecognized metric "%s"' % metric_name)
 
+  if options.log_requests is not None :
+    config["log_requests"] = options.log_requests
+
+  if options.proxy_verbose is not None :
+    config["proxy_verbose"] = options.proxy_verbose
+
+  NodeProxy.verbose = config.get("proxy_verbose", False)
+
   node = core.Node(config.get("node_id"), metric=metric)
 
   start(config.get("port", 10000), node,
         cloud_addrs=config.get("cloud_members", []),
-        heartbeat=config.get("heartbeat", 10))
+        heartbeat=config.get("heartbeat", 10),
+        log_requests=config.get("log_requests", False))
 
 
 if __name__=="__main__" :
