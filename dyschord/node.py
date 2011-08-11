@@ -135,21 +135,28 @@ def initialization_check(wrappee) :
 class Node(MutableMapping) :
 
   def __init__(self, id=None, nfingers=None, metric=None) :
-    # nfingers   None means default
+    """Create a new node
 
-    # uuid4 is not uniform over 2**128 because hex digit 13 is always
-    # 4, and hex digit 17 is either 8, 9, A, or B.  But since these
-    # are low digits, it shouldn't matter unless the number of nodes
-    # becomes super-large (~2**32 or so).  Plus using uuid4 means that
-    # the code will run on both Linux and Windows (otherwise, I'd have
-    # to copy the logic used in uuid.uuid4
-    if id is None :
-      self.__uuid = uuid.uuid4()
-    else :
-      self.__uuid = uuid.UUID(int=id)
+    parameters
+    - id         The id of the node, None means random
+    - nfingers   The number of fingers in the finger table
+    - metric     The metric to use. Md5Metric by default"""
+
     self.__metric = metric if metric else Md5Metric()
-    self.__id = self.__uuid.int % 2**self.__metric.hash_bits
+
+    if id is None :
+      # uuid4 is not uniform over 2**128 because hex digit 13 is
+      # always 4, and hex digit 17 is either 8, 9, A, or B.  But since
+      # these are low digits, it shouldn't matter unless the number of
+      # nodes becomes super-large (~2**32 or so).  Plus using uuid4
+      # means that the code will run on both Linux and Windows
+      # (otherwise, I'd have to copy the logic used in uuid.uuid4)
+      self.id = uuid.uuid4().int
+    else :
+      self.id = id
+
     self.data = {}
+
     self.predecessor = self
     if not nfingers :
       nfingers = finger_table_size
@@ -187,9 +194,14 @@ class Node(MutableMapping) :
   next = property(get_next, set_next, doc="Successor node")
 
 
-  @property
-  def id(self) :
+  def get_id(self) :
     return self.__id
+
+  def set_id(self, value) :
+    self.__id = value % 2**self.__metric.hash_bits
+
+  id = property(get_id, set_id)
+
 
   @property
   def name(self) :
