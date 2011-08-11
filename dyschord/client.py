@@ -190,6 +190,9 @@ class NodeProxy(object) :
     return self.server.repair_predecessor()
 
   def successor_leaving(self, new_successor) :
+    self.logger.info(
+      "Reporting successor of %d leaving and will be replaced with %d",
+      self.id, new_successor.id)
     self.server.successor_leaving(self.node_translator.to_descr(new_successor))
 
   def predecessor_leaving(self, new_predecessor,data) :
