@@ -154,6 +154,10 @@ class NodeProxy(object) :
     return self.server.store_backup(key, value,
                                     self.node_translator.to_descr(predecessor))
 
+  def update_backup(self, data) :
+    self.logger.debug("Updating backup to include %s", data)
+    return self.server.update_backup(data)
+
   def find_node(self, key_hash) :
     node_info = self.server.find_node(key_hash)
     self.logger.debug("Making new proxy for %s", node_info)

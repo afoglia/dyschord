@@ -624,6 +624,23 @@ class Node(MutableMapping) :
         break
       node.update_fingers_on_leave(old_successor, new_successor)
 
+    self.logger.debug("Backing up data on new successor")
+    to_backup = {}
+    with self.data_lock.rdlocked() :
+      for k, v in self.data.iteritems() :
+        key_hash = self.hash_key(k)
+        self.logger.log(5, "Comparing key %s, predecessor.id %s, current.id %s",
+                        k, self.predecessor.id, self.id)
+        if (self.distance(key_hash, self.predecessor.id) <
+            self.distance(key_hash, self.id)) :
+          to_backup[k] = v
+    self.logger.debug("Data to backup: %s", to_backup)
+    new_successor.update_backup(to_backup)
+
+  def update_backup(self, data) :
+    with self.data_lock.wrlocked() :
+      self.data.update(data)
+
   def leave(self) :
     with self.data_lock.wrlocked() :
       with self.finger_lock.rdlocked() :

@@ -78,6 +78,9 @@ class DyschordService(object) :
     self.node.store_backup(key, value,
                                   self._node_from_descr(predecessor))
 
+  def update_backup(self, data) :
+    self.node.update_backup(data)
+
   def _serialize_node_descr(self, node) :
     return NodeProxy.to_descr(node)
 
