@@ -13,11 +13,19 @@ from . import readwritelock
 
 _logger = logging.getLogger("dyschord.core")
 
+
 class Md5Metric(object) :
+  """MD5-based ring metric
+
+  Hashes are computed from the MD5 sums of the keys."""
+
   # Since both the md5 and uuid are 128-bit, I can use the former for
   # hashing, and the latter for the node ids and the sizes already work.
 
   def __init__(self, hash_bits=128) :
+    """Create a new MD5-based ring metric
+
+    hash_bits is the number of bits to use in the ring size"""
     self.hash_bits = hash_bits
 
   # I don't want to shadow a builtin, so I'll give it this clumsy name.
@@ -30,17 +38,14 @@ class Md5Metric(object) :
   # <http://www.linuxjournal.com/article/6797>
   def distance(self, a, b) :
     return (b-a) % 2**self.hash_bits
-    # # k is the number of bits in the ids used.  For a uuid, this is 128
-    # # bytes.  If this were C, one would need to worry about overflow,
-    # # because 2**128 takes 129 bytes to store.
-    # if a < b:
-    #   return b-a
-    # elif a == b :
-    #   return 0
-    # else :
-    #   return (2**self.hash_bits) + (b-a)
+
 
 class TrivialMetric(Md5Metric) :
+  """Trivial ring metric used for testing
+
+  Hashes are the integer values of the strings modulus 2**hash_bits.
+  As a result, all keys must be integer strings."""
+
   def __init__(self, hash_bits) :
     Md5Metric.__init__(self, hash_bits)
 
@@ -48,8 +53,7 @@ class TrivialMetric(Md5Metric) :
     return int(key) % 2**self.hash_bits
 
 
-
-# Keep the finger_table_size small for testing, so I can get my head around it
+# Default finger table size
 finger_table_size = 128
 
 
@@ -105,7 +109,9 @@ class Uninitialized(Exception) :
 # complicated.  But it would have the benefit of having no cost once
 # the node is initializaed.
 #
-# 2. Use a lock.  But I don't want to block, I want to throw an exception.  And I don't want have to pay the overhead of the extra lock.
+# 2. Use a lock.  But I don't want to block, I want to immediately
+# throw an exception.  And I don't want have to pay the overhead of
+# the extra lock.
 def initialization_check(wrappee) :
   @functools.wraps(wrappee)
   def wrapped(*args, **kwargs) :
