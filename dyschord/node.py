@@ -462,6 +462,21 @@ class Node(MutableMapping) :
       self.logger.debug("End updating fingers for new node")
 
 
+  def update_fingers_on_leave(self, leaving, successor_of_leaving) :
+    self.logger.debug("Fixing fingers for departure of %d", leaving.id)
+    if leaving.id not in set(f.id for f in self.fingers) :
+      return
+    distance_to_leaving = self.distance(self.id, leaving.id)
+    self.logger.log(5, "Distance to leaving %d", distance_to_leaving)
+    with self.finger_lock.wrlocked() :
+      for i, step in enumerate(self.finger_steps) :
+        if step > distance_to_leaving :
+          break
+        if self.fingers[i].id != leaving.id :
+          continue
+        self.fingers[i] = successor_of_leaving
+
+
   @initialization_check
   def prepend_node(self, newnode) :
     # By making the method a "prepend node" called on the new
@@ -531,12 +546,19 @@ class Node(MutableMapping) :
 
   def predecessor_leaving(self, new_predecessor, data) :
     with self.data_lock.wrlocked() :
+      old_predecessor = self.predecessor
       with self.finger_lock.wrlocked() :
         self.logger.info("Predecessor %d shutting down", self.predecessor.id)
         self.logger.debug("New predecessor %d", new_predecessor.id)
         self.logger.debug("Taking over data: %s", data)
         self.data.update(data)
         self.predecessor = new_predecessor
+        self.logger.debug("Checking fingers")
+        for i in xrange(len(self.fingers)-1, -1, -1) :
+          if self.fingers[i].id == old_predecessor.id :
+            self.fingers[i] = self
+          elif self.fingers[i].id != self.id :
+            break
 
   def successor_leaving(self, new_successor) :
     with self.finger_lock.wrlocked() :
@@ -544,6 +566,11 @@ class Node(MutableMapping) :
       for i, finger in enumerate(self.fingers) :
         if finger.id == old_successor.id :
           self.fingers[i] = new_successor
+
+    for node in walk(new_successor) :
+      if node.id == self.id :
+        break
+      node.update_fingers_on_leave(old_successor, new_successor)
 
   def leave(self) :
     with self.data_lock.wrlocked() :

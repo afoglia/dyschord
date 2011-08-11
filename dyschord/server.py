@@ -106,6 +106,12 @@ class DyschordService(object) :
                       node.get("id"))
     return self.node.update_fingers_on_insert(NodeProxy.from_descr(node))
 
+  def update_fingers_on_leave(self, leaving, successor_of_leaving) :
+    return self.node.update_fingers_on_leave(
+      NodeProxy.node_translator.from_descr(leaving),
+      NodeProxy.node_translator.from_descr(successor_of_leaving))
+
+
   def prepend_node(self, node_descr) :
     node_proxy = self._node_from_descr(node_descr)
     self.logger.debug("Trying to prepend node %d", node_proxy.id)

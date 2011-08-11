@@ -161,6 +161,12 @@ class NodeProxy(object) :
     return self.server.update_fingers_on_insert(
       self.node_translator.to_descr(node))
 
+  def update_fingers_on_leave(self, leaving, successor_of_leaving) :
+    return self.server.update_fingers_on_leave(
+      self.node_translator.to_descr(leaving),
+      self.node_translator.to_descr(successor_of_leaving))
+
+
   def prepend_node(self, node, url=None) :
     return self.server.prepend_node(self.node_translator.to_descr(node))
 
