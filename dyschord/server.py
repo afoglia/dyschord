@@ -50,9 +50,15 @@ class DyschordService(object) :
       try :
         target_node = core.find_node(self.node, key_hash)
       except (socket.error, socket.timeout) :
-        self.node.repair_fingers()
-        self.node.repair_predecessor()
+        self.repair_predecessor()
+        self.repair_fingers()
     return target_node.lookup(key)
+
+  def repair_fingers(self) :
+    self.node.repair_fingers()
+
+  def repair_predecessor(self) :
+    self.node.repair_predecessor()
 
   def store(self, key, value) :
     key_hash = self.node.hash_key(key)
@@ -135,6 +141,24 @@ class DyschordService(object) :
     self.node.leave()
 
 
+class SuccessorMonitor(threading.Thread) :
+  def __init__(self, node, frequency=1) :
+    self.node = node
+    self.frequency = frequency
+    self.logger = logging.getLogger("dyschord.service.link_monitor")
+
+  def run(self) :
+    while True :
+      successor = self.node.next
+      try :
+        self.successor.ping()
+      except (socket.error, socket.timeout) :
+        self.logger.warn("Successor %d at %s non-responsive",
+                         successor.id, successor.url)
+        
+      time.sleep(self.frequency)
+
+
 def start_in_thread(server) :
   server_main_thread = threading.Thread(target=server.serve_forever)
   server_main_thread.start()
@@ -198,6 +222,9 @@ def start(port, node=None, cloud_addrs=[], forever=True) :
     # All initialized
     service.logger.info("Successfully setup node")
     service.node.initialized = True
+
+    # Kick off another thread to monitor the successor and make sure
+    # that's always correct...
     while forever :
       time.sleep(10)
       pass

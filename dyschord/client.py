@@ -177,6 +177,12 @@ class NodeProxy(object) :
                    for step, descr in fingers.iteritems())
     return fingers
 
+  def repair_fingers(self) :
+    return self.server.repair_fingers()
+
+  def repair_predecessor(self) :
+    return self.server.repair_predecessor()
+
   def successor_leaving(self, new_successor) :
     self.server.successor_leaving(self.node_translator.to_descr(new_successor))
 

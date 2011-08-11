@@ -313,9 +313,18 @@ class Node(MutableMapping) :
   def get_fingers(self) :
     return dict(zip(self.finger_steps, self.fingers))
 
+  def repair_successor(self) :
+    with self.finger_lock.wrlocked() :
+      self.logger.debug(
+        "Ensuring successor points to node with us as predecessor")
+      curr_successor = self.next
+      while curr_successor.predecessor.id != self.id :
+        curr_successor = curr_successor.predecessor
+      self.fingers[0] = curr_successor
+
   def repair_fingers(self) :
     self.logger.info("Repairing fingers")
-    furthest_known = self
+    furthest_known = None
     with self.finger_lock.wrlocked() :
       self.logger.debug("Old fingers: %s", [f.id for f in self.fingers])
       for i, finger in enumerate(self.fingers) :
@@ -324,42 +333,62 @@ class Node(MutableMapping) :
         except (socket.error, socket.timeout) :
           self.fingers[i] = furthest_known
         else :
+          if furthest_known is None :
+            # Back propagate current best known finger.
+            self.fingers[:i] = [self.fingers[i]]*i
           furthest_known = finger
       self.logger.debug("Corrected fingers: %s", [f.id for f in self.fingers])
       # All point somewhere, now I can update to correct them.
       self.update_fingers()
       self.logger.debug("Updated corrected fingers: %s",
                         [f.id for f in self.fingers])
+    # Repair successor more carefully by ensuring the successor is
+    # the node that thinks we are its predecessor.
+    self.repair_successor()
 
   def repair_predecessor(self) :
     # I'll use the finger lock because the predecessor is essentially
     # another finger.
     self.logger.debug("Repairing predecessor")
     with self.finger_lock.wrlocked() :
-      self.logger.debug("Old predecessor", self.predecessor.id)
+      self.logger.debug("Old predecessor %s", self.predecessor.id)
       try :
         self.predecessor.ping()
       except (socket.error, socket.timeout) :
-        # No.  I can't be me... Who should it be...
+        self.logger.warn("Preceding node %s down", self.predecessor.id)
+
+        # Who should it be...
         furthest_known = self
         idx = len(self.fingers)
-        while furthest_known.id == self.id and idx >= 0 :
-          idx -= 1
-          if self.fingers[idx].id != self.id :
-            furthest_known = self.fingers[idx]
+        for finger in reversed(self.fingers) :
+          if finger.id in (self.id, self.predecessor.id) :
+            continue
+          else :
+            furthest_known = finger
+            break
         if furthest_known.id == self.id :
           self.logger.warn("Unable to find any other nodes")
           self.predecessor = self
           return
 
         # Need to actually walk the successors...
-        predecessor = furthest_known
-        for node in walk(furthest_known) :
-          if node.id == self.id :
-            break
+        # Since we expect only the predecessor to be down, we'll work backwards
+        self.logger.debug("Getting list of nodes")
+        known_nodes = list(
+          itertools.takewhile((lambda node: node.id != self.predecessor.id),
+                              walk(furthest_known)))
+        self.logger.debug("Checking node")
+        while known_nodes :
+          possible_pred = known_nodes.pop()
+          try :
+            possible_pred.ping()
+          except (socket.error, socket.timeout) :
+            continue
           else :
-            predecessor = node
-        self.predecessor = predecessor
+            break
+        self.predecessor = possible_pred
+
+        # Need to get the data from it for backup purposes...
 
 
   def update_fingers(self) :
