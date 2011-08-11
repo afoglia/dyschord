@@ -99,6 +99,8 @@ def find_node(start, key_hash) :
 class Uninitialized(Exception) :
   pass
 
+class RingBroken(Exception) :
+  pass
 
 # Helper function to deactivate methods while the node is starting up.
 # The other options are:
@@ -271,8 +273,9 @@ class Node(MutableMapping) :
     # the values again.
     with self.data_lock.wrlocked() :
       if predecessor.id != self.predecessor.id :
-        raise Exception(
-          "Mesh corruption: Storing backup for node %d, but actual predecessor is %d" % (predecessor.id, self.predecessor.id))
+        raise RingBroken(
+          "Storing backup for node %d, but actual predecessor is %d"
+          % (predecessor.id, self.predecessor.id))
       self.data[key] = value
 
   @initialization_check
@@ -440,7 +443,9 @@ class Node(MutableMapping) :
                                           % 2**self.__metric.hash_bits))
       self.logger.debug("New fingers: %s", self.fingers)
 
+
   def update_fingers_on_insert(self, newnode) :
+    """Update fingers due to new node coming up"""
     # Faster updating when new node is added.
     #
     # When a new node is added, we don't need to check all the fingers
@@ -636,7 +641,7 @@ def walk(start) :
   node = start
   while True :
     if node.id in seen :
-      raise Exception("Infinite loop.  Seen %s twice" % node.id)
+      raise RingBroken("Infinite loop.  Seen %s twice" % node.id)
     seen.add(node.id)
     yield node
     node = node.next
