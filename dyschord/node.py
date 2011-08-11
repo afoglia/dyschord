@@ -611,6 +611,8 @@ class Node(MutableMapping) :
             self.fingers[i] = self
           elif self.fingers[i].id != self.id :
             break
+    if self.next.id != self :
+      self.update_backup(data)
 
   def successor_leaving(self, new_successor) :
     with self.finger_lock.wrlocked() :
@@ -625,6 +627,8 @@ class Node(MutableMapping) :
       node.update_fingers_on_leave(old_successor, new_successor)
 
     self.logger.debug("Backing up data on new successor")
+    # If this was a clean shut down, this is unnecessary, but there's
+    # no harm in doing this check, other than network time.
     to_backup = {}
     with self.data_lock.rdlocked() :
       for k, v in self.data.iteritems() :
