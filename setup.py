@@ -8,5 +8,11 @@ setup(
   packages=find_packages(),
 
   author="Anthony Foglia",
-  author_email="afoglia@gmail.com"
+  author_email="afoglia@gmail.com",
+
+  entry_points = {
+    'console_scripts': [
+      'dyschord-server = dyschord.server:main'
+      ]
+    }
   )
