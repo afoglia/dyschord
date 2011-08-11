@@ -203,7 +203,7 @@ def start_in_thread(server) :
 
   
   
-def start(port, node=None, cloud_addrs=[], forever=True) :
+def start(port, node=None, cloud_addrs=[], heartbeat=10, forever=True) :
   if node is None :
     node = core.Node()
   service = DyschordService(node)
@@ -269,7 +269,7 @@ def start(port, node=None, cloud_addrs=[], forever=True) :
 
     # Kick off another thread to monitor the successor and make sure
     # that's always correct...
-    pred_monitor = PredecessorMonitor(service.node)
+    pred_monitor = PredecessorMonitor(service.node, heartbeat=heartbeat)
     pred_monitor.run()
     while forever :
       time.sleep(60)
@@ -283,7 +283,7 @@ def start(port, node=None, cloud_addrs=[], forever=True) :
   finally :
     if forever :
       if pred_monitor is not None :
-        print "Shutting down predecessor monitor"
+        logging.debug("Shutting down predecessor monitor")
         pred_monitor.stop()
       service.node.leave()
       server.shutdown()
@@ -338,7 +338,8 @@ def main(args=sys.argv) :
   node = core.Node(config.get("node_id"), metric=metric)
 
   start(config.get("port", 10000), node,
-        cloud_addrs=config.get("cloud_members", []))
+        cloud_addrs=config.get("cloud_members", []),
+        heartbeat=config.get("heartbeat", 10))
 
 
 if __name__=="__main__" :
