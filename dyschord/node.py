@@ -313,6 +313,7 @@ class Node(MutableMapping) :
         if (distance_to_node < distance(key_hash, finger.id)) :
           self.logger.log(5, "Advancing to finger %d", finger.id)
           return finger
+      self.logger.log(5, "Closest node is myself")
       return self
 
   def ping(self) :
@@ -369,8 +370,11 @@ class Node(MutableMapping) :
         # Who should it be...
         furthest_known = self
         idx = len(self.fingers)
-        for finger in reversed(self.fingers) :
-          if finger.id in (self.id, self.predecessor.id) :
+        for i, finger in reversed(list(enumerate(self.fingers))) :
+          if finger.id == self.id :
+            continue
+          elif finger.id == self.predecessor.id :
+            self.fingers[i] = self
             continue
           else :
             furthest_known = finger
@@ -396,16 +400,26 @@ class Node(MutableMapping) :
           else :
             break
         self.predecessor = possible_pred
+      else :
+        # Predecessor pinged successfully
+        return
 
-        # Need to get the data from it for backup purposes...
+    self.logger.debug("Notifying new predecessor %s", self.predecessor.id)
+    possible_pred.successor_leaving(self)
+
+    # Need to get the data from it for backup purposes...
 
 
   def update_fingers(self) :
     with self.finger_lock.wrlocked() :
+      self.logger.debug("Old fingers: %s", self.fingers)
       for i, step in enumerate(self.finger_steps) :
         old = self.fingers[i]
+        self.logger.log(5, "Updating finger %d pointing %d away",
+                        i, step)
         self.fingers[i] = find_node(old, ((self.id+step)
                                           % 2**self.__metric.hash_bits))
+      self.logger.debug("New fingers: %s", self.fingers)
 
   def update_fingers_on_insert(self, newnode) :
     # Faster updating when new node is added.
