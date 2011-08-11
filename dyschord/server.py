@@ -210,6 +210,7 @@ def start(port, node=None, cloud_addrs=[], forever=True) :
   server.register_instance(service)
 
   server_thread = None
+  pred_monitor = None
   try :
     print "Starting service on port", port
     print "Use Contrl-C to exit"
@@ -261,9 +262,15 @@ def start(port, node=None, cloud_addrs=[], forever=True) :
   except KeyboardInterrupt :
     forever = True
     print "Exiting"
+  except Exception, e :
+    print "Fatal error:", e
+    logging.exception("Fatal error while setting up server:")
+    raise
   finally :
     if forever :
-      pred_monitor.stop()
+      if pred_monitor is not None :
+        print "Shutting down predecessor monitor"
+        pred_monitor.stop()
       service.node.leave()
       server.shutdown()
       if server_thread is not None :
