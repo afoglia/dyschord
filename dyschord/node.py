@@ -7,6 +7,7 @@ from collections import MutableMapping
 import logging
 import socket
 import itertools
+import threading
 
 from . import readwritelock
 
@@ -526,7 +527,7 @@ class Node(MutableMapping) :
               < self.distance(key_hash, self.id)) :
             delegated_data[k] = v
             if (self.distance(key_hash, old_predecessor.id)
-                < self.distance(key_hash, new_node.id)) :
+                < self.distance(key_hash, newnode.id)) :
               # Was storing it as a backup, but not needed anymore
               to_delete.add(k)
         self.logger.debug("Sending data: %s", delegated_data)
@@ -545,10 +546,10 @@ class Node(MutableMapping) :
     announce(newnode)
 
     # Now that we're all set up, we can delete the unneeded values.
-    # Do this in a thread so the caller (the new node) is no longer
+    # Do this in a thread so the caller is no longer
     # blocked.
     janitor_thread = threading.Thread(target=self._data_cleanup,
-                                      args=to_delete)
+                                      args=(to_delete,))
     janitor_thread.start()
 
 
