@@ -43,13 +43,17 @@ class DyschordService(object) :
             <= self.node.distance(key_hash, self.node.predecessor.id)) :
           return self.node[key]
       except (socket.error, socket.timeout) :
-        self.node.repair_fingers()
+        if ntries == 0 :
+          self.logger.error("Node pointer corruption!!!")
         self.node.repair_predecessor()
+        self.node.repair_fingers()
       except KeyError, e :
         raise Fault(404, e.message)
       try :
         target_node = core.find_node(self.node, key_hash)
       except (socket.error, socket.timeout) :
+        if ntries == 0 :
+          self.logger.error("Node pointer corruption!!!")
         self.repair_predecessor()
         self.repair_fingers()
     return target_node.lookup(key)
@@ -87,8 +91,18 @@ class DyschordService(object) :
     return self._serialize_node_descr(rslt)
 
   def closest_preceding_node(self, key_hash) :
-    rslt = self.node.closest_preceding_node(key_hash)
-    return self._serialize_node_descr(rslt)
+    ntries = 2
+    while ntries > 0 :
+      ntries -= 1
+      try :
+        return NodeProxy.node_translator.to_descr(
+          self.node.closest_preceding_node(key_hash))
+      except (socket.error, socket.timeout) :
+        if ntries == 0 :
+          self.logger.error("Node pointer corruption!!!")
+          raise
+        self.node.repair_predecessor()
+        self.node.repair_fingers()
 
   def get_next(self) :
     rslt = self.node.next
