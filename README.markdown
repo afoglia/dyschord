@@ -1,10 +1,12 @@
 # Distributed Key-Value Storage Example
 Anthony Foglia
 
-The test problem asked for a distributed key-value store.  I started
-reading up on DHTs and coding an implementation of the
-[Chord algorithm](http://pdos.csail.mit.edu/papers/chord:sigcomm01/chord_sigcomm.pdf),
-and built it up into a package I call, dyschord.
+This in an example of a distributed key-value store based on the
+[Chord algorithm](http://pdos.csail.mit.edu/papers/chord:sigcomm01/chord_sigcomm.pdf).
+It was done as a coding exercise for an employer I was applying to.  I
+have tried to remove the employer's name in case they continue to use
+the question.  As a coding exercise, I have not tested this on
+different versions of python of done any performance tests.
 
 ## Requirements
 
