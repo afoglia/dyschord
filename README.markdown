@@ -193,7 +193,7 @@ wouldn't know till I code it.
 and [Koorde](http://iptps03.cs.berkeley.edu/final-papers/koorde.ps)
 algorithms.  The former uses a symmetric distance so keeping the
 finger table correct is supposedly easier.  The latter gives better
-performance for lookups (O(log(n)/log(log(n)) vs. O(log(n) for Chord
+performance for lookups (O(log(n)/log(log(n)) vs. O(log(n)) for Chord
 with finger tables)
 
 ## Possible problems
