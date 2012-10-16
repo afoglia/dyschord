@@ -189,10 +189,8 @@ actually make the logic for node joins and disconnects easier.  I
 wouldn't know till I code it.
 
 5. *Other DHT algorithms:* I would like to try the
-[the [Kademlia](http://www.cs.rice.edu/Conferences/IPTPS02/109.pdf}
+[the Kademlia](http://www.cs.rice.edu/Conferences/IPTPS02/109.pdf)
 and [Koorde](http://iptps03.cs.berkeley.edu/final-papers/koorde.ps)
-methods ](http://www.cs.rice.edu/Conferences/IPTPS02/109.pdf} and
-[Koorde](http://iptps03.cs.berkeley.edu/final-papers/koorde.ps)
 algorithms.  The former uses a symmetric distance so keeping the
 finger table correct is supposedly easier.  The latter gives better
 performance for lookups (O(log(n)/log(log(n)) vs. O(log(n) for Chord
